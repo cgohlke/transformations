@@ -44,11 +44,11 @@ Refer to the transformations.py module for documentation and tests.
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
-:Version: 2018.8.29
+:Version: 2018.9.5
 
 */
 
-#define _VERSION_ "2018.8.29"
+#define _VERSION_ "2018.9.5"
 
 #define WIN32_LEAN_AND_MEAN
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
@@ -2116,7 +2116,8 @@ static int axis2tuple(
         char *s = PyString_AS_STRING(axes);
 #else
     if (PyUnicode_Check(axes) && (PyUnicode_GetSize(axes) == 4)) {
-        char *s = PyBytes_AsString(PyUnicode_AsASCIIString(axes));
+        PyObject* axes_ascii = PyUnicode_AsASCIIString(axes);
+        char *s = PyBytes_AsString(axes_ascii);
 #endif
         int hash = *((int *)s);
         switch (hash)
@@ -2197,6 +2198,9 @@ static int axis2tuple(
             PyErr_Format(PyExc_ValueError, "invalid axes string");
             return -1;
         }
+#if PY_MAJOR_VERSION > 2
+        Py_XDECREF(axes_ascii);
+#endif
         return 0;
     }
 
@@ -2436,8 +2440,7 @@ py_quaternion_from_euler(
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "ddd|O", kwlist,
         &ai, &aj, &ak, &axes)) goto _fail;
 
-    if (axes != NULL)
-        Py_INCREF(axes);
+    Py_XINCREF(axes);
 
     result = (PyArrayObject*)PyArray_SimpleNew(1, &dims, NPY_DOUBLE);
     if (result == NULL) {
