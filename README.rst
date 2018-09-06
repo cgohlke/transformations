@@ -14,7 +14,7 @@ functions to decompose transformation matrices.
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
-:Version: 2018.8.29
+:Version: 2018.9.5
 
 Requirements
 ------------
