@@ -9,19 +9,21 @@
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
 #
-# * Redistributions of source code must retain the above copyright
-#   notice, this list of conditions and the following disclaimer.
-# * Redistributions in binary form must reproduce the above copyright
-#   notice, this list of conditions and the following disclaimer in the
-#   documentation and/or other materials provided with the distribution.
-# * Neither the name of the copyright holders nor the names of any
-#   contributors may be used to endorse or promote products derived
-#   from this software without specific prior written permission.
+# * Redistributions of source code must retain the above copyright notice,
+#   this list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+#
+# * Neither the name of the copyright holder nor the names of its
+#   contributors may be used to endorse or promote products derived from
+#   this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-# ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
 # LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
 # CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
 # SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
@@ -32,7 +34,7 @@
 
 """Homogeneous Transformation Matrices and Quaternions.
 
-A collection of functions and classes for calculating 4x4 matrices for
+Transformations is a Python library for calculating 4x4 matrices for
 translating, rotating, reflecting, scaling, shearing, projecting,
 orthogonalizing, and superimposing arrays of 3D homogeneous coordinates
 as well as for converting between rotation matrices, Euler angles,
@@ -45,12 +47,12 @@ functions to decompose transformation matrices.
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
-:Version: 2018.9.5
+:Version: 2018.10.18
 
 Requirements
 ------------
-* `CPython 2.7 or 3.5+ <http://www.python.org>`_
-* `Numpy 1.14 <http://www.numpy.org>`_
+* `CPython 2.7 or 3.5+ <https://www.python.org>`_
+* `Numpy 1.14 <https://www.numpy.org>`_
 
 Notes
 -----
@@ -200,7 +202,7 @@ True
 
 from __future__ import division, print_function
 
-__version__ = '2018.9.5'
+__version__ = '2018.10.18'
 __docformat__ = 'restructuredtext en'
 
 import math
