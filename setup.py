@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 # transformations/setup.py
 
-from setuptools import setup, Extension
+"""Transformations package setuptools script."""
 
 import sys
 import re
 import warnings
+
+from setuptools import setup, Extension
 
 import numpy
 
@@ -13,7 +15,7 @@ with open('transformations/transformations.py') as fh:
     code = fh.read()
 
 version = re.search(r"__version__ = '(.*?)'", code).groups()[0]
-description = re.search(r'"""(.*)\.\n', code).groups()[0]
+description = re.search(r'"""(.*)\.[\r\n?|\n]', code).groups()[0]
 readme = re.search(r'[\r\n?|\n]{2}"""(.*)"""[\r\n?|\n]{2}from', code,
                    re.MULTILINE | re.DOTALL).groups()[0]
 license = re.search(r'(# Copyright.*?[\r\n?|\n])[\r\n?|\n]+""', code,
@@ -43,7 +45,7 @@ setup_args = dict(
     author_email='cgohlke@uci.edu',
     url='https://www.lfd.uci.edu/~gohlke/',
     python_requires='>=2.7',
-    install_requires=['numpy>=1.14'],
+    install_requires=['numpy>=1.11.3'],
     packages=['transformations'],
     license='BSD',
     zip_safe=False,
