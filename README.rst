@@ -1,7 +1,7 @@
 Homogeneous Transformation Matrices and Quaternions
 ===================================================
 
-A collection of functions and classes for calculating 4x4 matrices for
+Transformations is a Python library for calculating 4x4 matrices for
 translating, rotating, reflecting, scaling, shearing, projecting,
 orthogonalizing, and superimposing arrays of 3D homogeneous coordinates
 as well as for converting between rotation matrices, Euler angles,
@@ -14,12 +14,12 @@ functions to decompose transformation matrices.
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
-:Version: 2018.9.5
+:Version: 2018.10.18
 
 Requirements
 ------------
-* `CPython 2.7 or 3.5+ <http://www.python.org>`_
-* `Numpy 1.14 <http://www.numpy.org>`_
+* `CPython 2.7 or 3.5+ <https://www.python.org>`_
+* `Numpy 1.14 <https://www.numpy.org>`_
 
 Notes
 -----
