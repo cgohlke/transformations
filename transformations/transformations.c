@@ -1,8 +1,8 @@
 /* transformations.c */
 
 /*
-Copyright (c) 2006-2018, Christoph Gohlke
-Copyright (c) 2006-2018, The Regents of the University of California
+Copyright (c) 2006-2019, Christoph Gohlke
+Copyright (c) 2006-2019, The Regents of the University of California
 Produced at the Laboratory for Fluorescence Dynamics
 All rights reserved.
 
@@ -34,22 +34,22 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* Homogeneous Transformation Matrices and Quaternions.
 
-A Python C extension module to provide faster implementations for the
-transformations package.
+Transformations.c is a Python C extension module to provide faster
+implementations for the transformations package.
 
 Refer to the transformations.py module for documentation and tests.
 
 :Author:
-  `Christoph Gohlke <http://www.lfd.uci.edu/~gohlke/>`_
+  `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
 
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
-:Version: 2018.10.18
+:Version: 2019.1.1
 
 */
 
-#define _VERSION_ "2018.10.18"
+#define _VERSION_ "2019.1.1"
 
 #define WIN32_LEAN_AND_MEAN
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
