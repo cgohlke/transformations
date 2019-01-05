@@ -14,12 +14,18 @@ functions to decompose transformation matrices.
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
-:Version: 2018.10.18
+:Version: 2019.1.1
 
 Requirements
 ------------
 * `CPython 2.7 or 3.5+ <https://www.python.org>`_
 * `Numpy 1.14 <https://www.numpy.org>`_
+* A Python distutils compatible C compiler  (build)
+
+Revisions
+---------
+2019.1.1
+    Update copyright year.
 
 Notes
 -----
