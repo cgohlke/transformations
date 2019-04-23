@@ -47,11 +47,11 @@ Refer to the transformations.py module for documentation and tests.
 
 :License: 3-clause BSD
 
-:Version: 2019.2.20
+:Version: 2019.4.22
 
 */
 
-#define _VERSION_ "2019.2.20"
+#define _VERSION_ "2019.4.22"
 
 #define WIN32_LEAN_AND_MEAN
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
