@@ -16,16 +16,18 @@ functions to decompose transformation matrices.
 
 :License: 3-clause BSD
 
-:Version: 2019.2.20
+:Version: 2019.4.22
 
 Requirements
 ------------
 * `CPython 2.7 or 3.5+ <https://www.python.org>`_
-* `Numpy 1.14 <https://www.numpy.org>`_
+* `Numpy 1.11.3 <https://www.numpy.org>`_
 * A Python distutils compatible C compiler  (build)
 
 Revisions
 ---------
+2019.4.22
+    Fix setup requirements.
 2019.1.1
     Update copyright year.
 
