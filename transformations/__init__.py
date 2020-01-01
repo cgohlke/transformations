@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # transformations/__init__.py
 
 from .transformations import __doc__, __version__
