@@ -1,24 +1,21 @@
-# -*- coding: utf-8 -*-
 # transformations.py
 
-# Copyright (c) 2006-2019, Christoph Gohlke
-# Copyright (c) 2006-2019, The Regents of the University of California
-# Produced at the Laboratory for Fluorescence Dynamics
+# Copyright (c) 2006-2020, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
 #
-# * Redistributions of source code must retain the above copyright notice,
-#   this list of conditions and the following disclaimer.
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
 #
-# * Redistributions in binary form must reproduce the above copyright notice,
-#   this list of conditions and the following disclaimer in the documentation
-#   and/or other materials provided with the distribution.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
 #
-# * Neither the name of the copyright holder nor the names of its
-#   contributors may be used to endorse or promote products derived from
-#   this software without specific prior written permission.
+# 3. Neither the name of the copyright holder nor the names of its
+#    contributors may be used to endorse or promote products derived from
+#    this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -47,22 +44,22 @@ functions to decompose transformation matrices.
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
-:License: 3-clause BSD
+:License: BSD 3-Clause
 
-:Version: 2019.4.22
+:Version: 2020.1.1
 
 Requirements
 ------------
-* `CPython 2.7 or 3.5+ <https://www.python.org>`_
-* `Numpy 1.11.3 <https://www.numpy.org>`_
-* A Python distutils compatible C compiler  (build)
+* `CPython >= 3.6 <https://www.python.org>`_
+* `Numpy 1.14 <https://www.numpy.org>`_
 
 Revisions
 ---------
+2020.1.1
+    Remove support for Python 2.7 and 3.5.
+    Update copyright.
 2019.4.22
     Fix setup requirements.
-2019.1.1
-    Update copyright year.
 
 Notes
 -----
@@ -74,12 +71,11 @@ for 3D transformations and quaternions:
   scipy/spatial/transform>`_
 * `Transforms3d <https://github.com/matthew-brett/transforms3d>`_
   (includes most code of this module)
+* `Pytransform3d <https://github.com/rock-learning/pytransform3d>`_
 * `Numpy-quaternion <https://github.com/moble/quaternion>`_
 * `Blender.mathutils <https://docs.blender.org/api/master/mathutils.html>`_
 
 The API is not stable yet and is expected to change between revisions.
-
-Python 2.7 and 3.4 are deprecated.
 
 This Python code is not optimized for speed. Refer to the transformations.c
 module for a faster implementation of some functions.
@@ -88,8 +84,8 @@ Documentation in HTML format can be generated with epydoc.
 
 Matrices (M) can be inverted using numpy.linalg.inv(M), be concatenated using
 numpy.dot(M0, M1), or transform homogeneous coordinate arrays (v) using
-numpy.dot(M, v) for shape (4, \*) column vectors, respectively
-numpy.dot(v, M.T) for shape (\*, 4) row vectors ("array of points").
+numpy.dot(M, v) for shape (4, -1) column vectors, respectively
+numpy.dot(v, M.T) for shape (-1, 4) row vectors ("array of points").
 
 This module follows the "column vectors on the right" and "row major storage"
 (C contiguous) conventions. The translation components are in the right column
@@ -126,38 +122,38 @@ be specified using a 4 character string or encoded 4-tuple:
 
 References
 ----------
-(1)  Matrices and transformations. Ronald Goldman.
-     In "Graphics Gems I", pp 472-475. Morgan Kaufmann, 1990.
-(2)  More matrices and transformations: shear and pseudo-perspective.
-     Ronald Goldman. In "Graphics Gems II", pp 320-323. Morgan Kaufmann, 1991.
-(3)  Decomposing a matrix into simple transformations. Spencer Thomas.
-     In "Graphics Gems II", pp 320-323. Morgan Kaufmann, 1991.
-(4)  Recovering the data from the transformation matrix. Ronald Goldman.
-     In "Graphics Gems II", pp 324-331. Morgan Kaufmann, 1991.
-(5)  Euler angle conversion. Ken Shoemake.
-     In "Graphics Gems IV", pp 222-229. Morgan Kaufmann, 1994.
-(6)  Arcball rotation control. Ken Shoemake.
-     In "Graphics Gems IV", pp 175-192. Morgan Kaufmann, 1994.
-(7)  Representing attitude: Euler angles, unit quaternions, and rotation
-     vectors. James Diebel. 2006.
-(8)  A discussion of the solution for the best rotation to relate two sets
-     of vectors. W Kabsch. Acta Cryst. 1978. A34, 827-828.
-(9)  Closed-form solution of absolute orientation using unit quaternions.
-     BKP Horn. J Opt Soc Am A. 1987. 4(4):629-642.
-(10) Quaternions. Ken Shoemake.
-     http://www.sfu.ca/~jwa3/cmpt461/files/quatut.pdf
-(11) From quaternion to matrix and back. JMP van Waveren. 2005.
-     http://www.intel.com/cd/ids/developer/asmo-na/eng/293748.htm
-(12) Uniform random rotations. Ken Shoemake.
-     In "Graphics Gems III", pp 124-132. Morgan Kaufmann, 1992.
-(13) Quaternion in molecular modeling. CFF Karney.
-     J Mol Graph Mod, 25(5):595-604
-(14) New method for extracting the quaternion from a rotation matrix.
-     Itzhack Y Bar-Itzhack, J Guid Contr Dynam. 2000. 23(6): 1085-1087.
-(15) Multiple View Geometry in Computer Vision. Hartley and Zissermann.
-     Cambridge University Press; 2nd Ed. 2004. Chapter 4, Algorithm 4.7, p 130.
-(16) Column Vectors vs. Row Vectors.
-     http://steve.hollasch.net/cgindex/math/matrix/column-vec.html
+1.  Matrices and transformations. Ronald Goldman.
+    In "Graphics Gems I", pp 472-475. Morgan Kaufmann, 1990.
+2.  More matrices and transformations: shear and pseudo-perspective.
+    Ronald Goldman. In "Graphics Gems II", pp 320-323. Morgan Kaufmann, 1991.
+3.  Decomposing a matrix into simple transformations. Spencer Thomas.
+    In "Graphics Gems II", pp 320-323. Morgan Kaufmann, 1991.
+4.  Recovering the data from the transformation matrix. Ronald Goldman.
+    In "Graphics Gems II", pp 324-331. Morgan Kaufmann, 1991.
+5.  Euler angle conversion. Ken Shoemake.
+    In "Graphics Gems IV", pp 222-229. Morgan Kaufmann, 1994.
+6.  Arcball rotation control. Ken Shoemake.
+    In "Graphics Gems IV", pp 175-192. Morgan Kaufmann, 1994.
+7.  Representing attitude: Euler angles, unit quaternions, and rotation
+    vectors. James Diebel. 2006.
+8.  A discussion of the solution for the best rotation to relate two sets
+    of vectors. W Kabsch. Acta Cryst. 1978. A34, 827-828.
+9.  Closed-form solution of absolute orientation using unit quaternions.
+    BKP Horn. J Opt Soc Am A. 1987. 4(4):629-642.
+10. Quaternions. Ken Shoemake.
+    http://www.sfu.ca/~jwa3/cmpt461/files/quatut.pdf
+11. From quaternion to matrix and back. JMP van Waveren. 2005.
+    http://www.intel.com/cd/ids/developer/asmo-na/eng/293748.htm
+12. Uniform random rotations. Ken Shoemake.
+    In "Graphics Gems III", pp 124-132. Morgan Kaufmann, 1992.
+13. Quaternion in molecular modeling. CFF Karney.
+    J Mol Graph Mod, 25(5):595-604
+14. New method for extracting the quaternion from a rotation matrix.
+    Itzhack Y Bar-Itzhack, J Guid Contr Dynam. 2000. 23(6): 1085-1087.
+15. Multiple View Geometry in Computer Vision. Hartley and Zissermann.
+    Cambridge University Press; 2nd Ed. 2004. Chapter 4, Algorithm 4.7, p 130.
+16. Column Vectors vs. Row Vectors.
+    http://steve.hollasch.net/cgindex/math/matrix/column-vec.html
 
 Examples
 --------
@@ -210,10 +206,7 @@ True
 
 """
 
-from __future__ import division, print_function
-
-__version__ = '2019.4.22'
-__docformat__ = 'restructuredtext en'
+__version__ = '2020.1.1'
 
 import math
 
@@ -347,9 +340,9 @@ def rotation_matrix(angle, direction, point=None):
     R = numpy.diag([cosa, cosa, cosa])
     R += numpy.outer(direction, direction) * (1.0 - cosa)
     direction *= sina
-    R += numpy.array([[ 0.0,         -direction[2],  direction[1]],
-                      [ direction[2], 0.0,          -direction[0]],
-                      [-direction[1], direction[0],  0.0]])
+    R += numpy.array([[0.0, -direction[2], direction[1]],
+                      [direction[2], 0.0, -direction[0]],
+                      [-direction[1], direction[0], 0.0]])
     M = numpy.identity(4)
     M[:3, :3] = R
     if point is not None:
@@ -633,7 +626,7 @@ def clip_matrix(left, right, bottom, top, near, far, perspective=False):
     >>> numpy.dot(M, [frustum[0], frustum[2], frustum[4], 1])
     array([-1., -1., -1.,  1.])
     >>> numpy.dot(M, [frustum[1], frustum[3], frustum[5], 1])
-    array([ 1.,  1.,  1.,  1.])
+    array([1., 1., 1., 1.])
     >>> M = clip_matrix(perspective=True, *frustum)
     >>> v = numpy.dot(M, [frustum[0], frustum[2], frustum[4], 1])
     >>> v / v[3]
@@ -896,16 +889,16 @@ def orthogonalization_matrix(lengths, angles):
     cosa, cosb, cosg = numpy.cos(angles)
     co = (cosa * cosb - cosg) / (sina * sinb)
     return numpy.array([
-        [ a*sinb*math.sqrt(1.0-co*co),  0.0,    0.0, 0.0],
-        [-a*sinb*co,                    b*sina, 0.0, 0.0],
-        [ a*cosb,                       b*cosa, c,   0.0],
-        [ 0.0,                          0.0,    0.0, 1.0]])
+        [a*sinb*math.sqrt(1.0-co*co), 0.0, 0.0, 0.0],
+        [-a*sinb*co, b*sina, 0.0, 0.0],
+        [a*cosb, b*cosa, c, 0.0],
+        [0.0, 0.0, 0.0, 1.0]])
 
 
 def affine_matrix_from_points(v0, v1, shear=True, scale=True, usesvd=True):
     """Return affine transform matrix to register two point sets.
 
-    v0 and v1 are shape (ndims, \*) arrays of at least ndims non-homogeneous
+    v0 and v1 are shape (ndims, -1) arrays of at least ndims non-homogeneous
     coordinates, where ndims is the dimensionality of the coordinate space.
 
     If shear is False, a similarity transformation matrix is returned.
@@ -925,9 +918,9 @@ def affine_matrix_from_points(v0, v1, shear=True, scale=True, usesvd=True):
     >>> v0 = [[0, 1031, 1031, 0], [0, 0, 1600, 1600]]
     >>> v1 = [[675, 826, 826, 677], [55, 52, 281, 277]]
     >>> affine_matrix_from_points(v0, v1)
-    array([[   0.14549,    0.00062,  675.50008],
-           [   0.00048,    0.14094,   53.24971],
-           [   0.     ,    0.     ,    1.     ]])
+    array([[  0.14549,   0.00062, 675.50008],
+           [  0.00048,   0.14094,  53.24971],
+           [  0.     ,   0.     ,   1.     ]])
     >>> T = translation_matrix(numpy.random.random(3)-0.5)
     >>> R = random_rotation_matrix(numpy.random.random(3))
     >>> S = scale_matrix(random.random())
@@ -1014,7 +1007,7 @@ def affine_matrix_from_points(v0, v1, shear=True, scale=True, usesvd=True):
 def superimposition_matrix(v0, v1, scale=False, usesvd=True):
     """Return matrix to transform given 3D point set into second point set.
 
-    v0 and v1 are shape (3, \*) or (4, \*) arrays of at least 3 points.
+    v0 and v1 are shape (3, -1) or (4, -1) arrays of at least 3 points.
 
     The parameters scale and usesvd are explained in the more general
     affine_matrix_from_points function.
@@ -1156,24 +1149,24 @@ def euler_from_matrix(matrix, axes='sxyz'):
 
     M = numpy.array(matrix, dtype=numpy.float64, copy=False)[:3, :3]
     if repetition:
-        sy = math.sqrt(M[i, j]*M[i, j] + M[i, k]*M[i, k])
+        sy = math.sqrt(M[i, j] * M[i, j] + M[i, k] * M[i, k])
         if sy > _EPS:
-            ax = math.atan2( M[i, j],  M[i, k])
-            ay = math.atan2( sy,       M[i, i])
-            az = math.atan2( M[j, i], -M[k, i])
+            ax = math.atan2(M[i, j], M[i, k])
+            ay = math.atan2(sy, M[i, i])
+            az = math.atan2(M[j, i], -M[k, i])
         else:
-            ax = math.atan2(-M[j, k],  M[j, j])
-            ay = math.atan2( sy,       M[i, i])
+            ax = math.atan2(-M[j, k], M[j, j])
+            ay = math.atan2(sy, M[i, i])
             az = 0.0
     else:
-        cy = math.sqrt(M[i, i]*M[i, i] + M[j, i]*M[j, i])
+        cy = math.sqrt(M[i, i] * M[i, i] + M[j, i] * M[j, i])
         if cy > _EPS:
-            ax = math.atan2( M[k, j],  M[k, k])
-            ay = math.atan2(-M[k, i],  cy)
-            az = math.atan2( M[j, i],  M[i, i])
+            ax = math.atan2(M[k, j], M[k, k])
+            ay = math.atan2(-M[k, i], cy)
+            az = math.atan2(M[j, i], M[i, i])
         else:
-            ax = math.atan2(-M[j, k],  M[j, j])
-            ay = math.atan2(-M[k, i],  cy)
+            ax = math.atan2(-M[j, k], M[j, j])
+            ay = math.atan2(-M[k, i], cy)
             az = 0.0
 
     if parity:
@@ -1288,10 +1281,10 @@ def quaternion_matrix(quaternion):
     q *= math.sqrt(2.0 / n)
     q = numpy.outer(q, q)
     return numpy.array([
-        [1.0-q[2, 2]-q[3, 3],     q[1, 2]-q[3, 0],     q[1, 3]+q[2, 0], 0.0],
-        [    q[1, 2]+q[3, 0], 1.0-q[1, 1]-q[3, 3],     q[2, 3]-q[1, 0], 0.0],
-        [    q[1, 3]-q[2, 0],     q[2, 3]+q[1, 0], 1.0-q[1, 1]-q[2, 2], 0.0],
-        [                0.0,                 0.0,                 0.0, 1.0]])
+        [1.0 - q[2, 2] - q[3, 3], q[1, 2] - q[3, 0], q[1, 3] + q[2, 0], 0.0],
+        [q[1, 2] + q[3, 0], 1.0 - q[1, 1] - q[3, 3], q[2, 3] - q[1, 0], 0.0],
+        [q[1, 3] - q[2, 0], q[2, 3] + q[1, 0], 1.0 - q[1, 1] - q[2, 2], 0.0],
+        [0.0, 0.0, 0.0, 1.0]])
 
 
 def quaternion_from_matrix(matrix, isprecise=False):
@@ -1438,7 +1431,7 @@ def quaternion_imag(quaternion):
     """Return imaginary part of quaternion.
 
     >>> quaternion_imag([3, 0, 1, 2])
-    array([ 0.,  1.,  2.])
+    array([0., 1., 2.])
 
     """
     return numpy.array(quaternion[1:4], dtype=numpy.float64, copy=True)
@@ -1466,7 +1459,7 @@ def quaternion_slerp(quat0, quat1, fraction, spin=0, shortestpath=True):
     q1 = unit_vector(quat1[:4])
     if fraction == 0.0:
         return q0
-    elif fraction == 1.0:
+    if fraction == 1.0:
         return q1
     d = numpy.dot(q0, q1)
     if abs(abs(d) - 1.0) < _EPS:
@@ -1528,7 +1521,7 @@ def random_rotation_matrix(rand=None):
     return quaternion_matrix(random_quaternion(rand))
 
 
-class Arcball(object):
+class Arcball:
     """Virtual Trackball Control.
 
     >>> ball = Arcball()
@@ -1551,6 +1544,7 @@ class Arcball(object):
     >>> ball.next()
 
     """
+
     def __init__(self, initial=None):
         """Initialize virtual trackball control.
 
@@ -1698,7 +1692,7 @@ _AXES2TUPLE = {
     'rzxy': (1, 1, 0, 1), 'ryxy': (1, 1, 1, 1), 'ryxz': (2, 0, 0, 1),
     'rzxz': (2, 0, 1, 1), 'rxyz': (2, 1, 0, 1), 'rzyz': (2, 1, 1, 1)}
 
-_TUPLE2AXES = dict((v, k) for k, v in _AXES2TUPLE.items())
+_TUPLE2AXES = {v: k for k, v in _AXES2TUPLE.items()}
 
 
 def vector_norm(data, axis=None, out=None):
@@ -1734,10 +1728,10 @@ def vector_norm(data, axis=None, out=None):
         out = numpy.atleast_1d(numpy.sum(data, axis=axis))
         numpy.sqrt(out, out)
         return out
-    else:
-        data *= data
-        numpy.sum(data, axis=axis, out=out)
-        numpy.sqrt(out, out)
+    data *= data
+    numpy.sum(data, axis=axis, out=out)
+    numpy.sqrt(out, out)
+    return None
 
 
 def unit_vector(data, axis=None, out=None):
@@ -1782,6 +1776,7 @@ def unit_vector(data, axis=None, out=None):
     data /= length
     if out is None:
         return data
+    return None
 
 
 def random_vector(size):
@@ -1918,14 +1913,15 @@ def _import_module(name, package=None, warn=True, postfix='_py', ignore='_'):
     """
     import warnings
     from importlib import import_module
+
     try:
         if not package:
             module = import_module(name)
         else:
             module = import_module('.' + name, package=package)
-    except ImportError as err:
+    except ImportError as exc:
         if warn:
-            warnings.warn(str(err))
+            warnings.warn(str(exc))
     else:
         for attr in dir(module):
             if ignore and attr.startswith(ignore):
@@ -1945,8 +1941,6 @@ _import_module('_transformations', __package__)
 if __name__ == '__main__':
     import doctest
     import random  # noqa: used in doctests
-    try:
-        numpy.set_printoptions(suppress=True, precision=5, legacy='1.13')
-    except TypeError:
-        numpy.set_printoptions(suppress=True, precision=5)
+
+    numpy.set_printoptions(suppress=True, precision=5)
     doctest.testmod()
