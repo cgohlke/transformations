@@ -14,22 +14,22 @@ functions to decompose transformation matrices.
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
-:License: 3-clause BSD
+:License: BSD 3-Clause
 
-:Version: 2019.4.22
+:Version: 2020.1.1
 
 Requirements
 ------------
-* `CPython 2.7 or 3.5+ <https://www.python.org>`_
-* `Numpy 1.11.3 <https://www.numpy.org>`_
-* A Python distutils compatible C compiler  (build)
+* `CPython >= 3.6 <https://www.python.org>`_
+* `Numpy 1.14 <https://www.numpy.org>`_
 
 Revisions
 ---------
+2020.1.1
+    Remove support for Python 2.7 and 3.5.
+    Update copyright.
 2019.4.22
     Fix setup requirements.
-2019.1.1
-    Update copyright year.
 
 Notes
 -----
@@ -41,12 +41,11 @@ for 3D transformations and quaternions:
   scipy/spatial/transform>`_
 * `Transforms3d <https://github.com/matthew-brett/transforms3d>`_
   (includes most code of this module)
+* `Pytransform3d <https://github.com/rock-learning/pytransform3d>`_
 * `Numpy-quaternion <https://github.com/moble/quaternion>`_
 * `Blender.mathutils <https://docs.blender.org/api/master/mathutils.html>`_
 
 The API is not stable yet and is expected to change between revisions.
-
-Python 2.7 and 3.4 are deprecated.
 
 This Python code is not optimized for speed. Refer to the transformations.c
 module for a faster implementation of some functions.
@@ -55,8 +54,8 @@ Documentation in HTML format can be generated with epydoc.
 
 Matrices (M) can be inverted using numpy.linalg.inv(M), be concatenated using
 numpy.dot(M0, M1), or transform homogeneous coordinate arrays (v) using
-numpy.dot(M, v) for shape (4, \*) column vectors, respectively
-numpy.dot(v, M.T) for shape (\*, 4) row vectors ("array of points").
+numpy.dot(M, v) for shape (4, -1) column vectors, respectively
+numpy.dot(v, M.T) for shape (-1, 4) row vectors ("array of points").
 
 This module follows the "column vectors on the right" and "row major storage"
 (C contiguous) conventions. The translation components are in the right column
@@ -93,38 +92,38 @@ be specified using a 4 character string or encoded 4-tuple:
 
 References
 ----------
-(1)  Matrices and transformations. Ronald Goldman.
-     In "Graphics Gems I", pp 472-475. Morgan Kaufmann, 1990.
-(2)  More matrices and transformations: shear and pseudo-perspective.
-     Ronald Goldman. In "Graphics Gems II", pp 320-323. Morgan Kaufmann, 1991.
-(3)  Decomposing a matrix into simple transformations. Spencer Thomas.
-     In "Graphics Gems II", pp 320-323. Morgan Kaufmann, 1991.
-(4)  Recovering the data from the transformation matrix. Ronald Goldman.
-     In "Graphics Gems II", pp 324-331. Morgan Kaufmann, 1991.
-(5)  Euler angle conversion. Ken Shoemake.
-     In "Graphics Gems IV", pp 222-229. Morgan Kaufmann, 1994.
-(6)  Arcball rotation control. Ken Shoemake.
-     In "Graphics Gems IV", pp 175-192. Morgan Kaufmann, 1994.
-(7)  Representing attitude: Euler angles, unit quaternions, and rotation
-     vectors. James Diebel. 2006.
-(8)  A discussion of the solution for the best rotation to relate two sets
-     of vectors. W Kabsch. Acta Cryst. 1978. A34, 827-828.
-(9)  Closed-form solution of absolute orientation using unit quaternions.
-     BKP Horn. J Opt Soc Am A. 1987. 4(4):629-642.
-(10) Quaternions. Ken Shoemake.
-     http://www.sfu.ca/~jwa3/cmpt461/files/quatut.pdf
-(11) From quaternion to matrix and back. JMP van Waveren. 2005.
-     http://www.intel.com/cd/ids/developer/asmo-na/eng/293748.htm
-(12) Uniform random rotations. Ken Shoemake.
-     In "Graphics Gems III", pp 124-132. Morgan Kaufmann, 1992.
-(13) Quaternion in molecular modeling. CFF Karney.
-     J Mol Graph Mod, 25(5):595-604
-(14) New method for extracting the quaternion from a rotation matrix.
-     Itzhack Y Bar-Itzhack, J Guid Contr Dynam. 2000. 23(6): 1085-1087.
-(15) Multiple View Geometry in Computer Vision. Hartley and Zissermann.
-     Cambridge University Press; 2nd Ed. 2004. Chapter 4, Algorithm 4.7, p 130.
-(16) Column Vectors vs. Row Vectors.
-     http://steve.hollasch.net/cgindex/math/matrix/column-vec.html
+1.  Matrices and transformations. Ronald Goldman.
+    In "Graphics Gems I", pp 472-475. Morgan Kaufmann, 1990.
+2.  More matrices and transformations: shear and pseudo-perspective.
+    Ronald Goldman. In "Graphics Gems II", pp 320-323. Morgan Kaufmann, 1991.
+3.  Decomposing a matrix into simple transformations. Spencer Thomas.
+    In "Graphics Gems II", pp 320-323. Morgan Kaufmann, 1991.
+4.  Recovering the data from the transformation matrix. Ronald Goldman.
+    In "Graphics Gems II", pp 324-331. Morgan Kaufmann, 1991.
+5.  Euler angle conversion. Ken Shoemake.
+    In "Graphics Gems IV", pp 222-229. Morgan Kaufmann, 1994.
+6.  Arcball rotation control. Ken Shoemake.
+    In "Graphics Gems IV", pp 175-192. Morgan Kaufmann, 1994.
+7.  Representing attitude: Euler angles, unit quaternions, and rotation
+    vectors. James Diebel. 2006.
+8.  A discussion of the solution for the best rotation to relate two sets
+    of vectors. W Kabsch. Acta Cryst. 1978. A34, 827-828.
+9.  Closed-form solution of absolute orientation using unit quaternions.
+    BKP Horn. J Opt Soc Am A. 1987. 4(4):629-642.
+10. Quaternions. Ken Shoemake.
+    http://www.sfu.ca/~jwa3/cmpt461/files/quatut.pdf
+11. From quaternion to matrix and back. JMP van Waveren. 2005.
+    http://www.intel.com/cd/ids/developer/asmo-na/eng/293748.htm
+12. Uniform random rotations. Ken Shoemake.
+    In "Graphics Gems III", pp 124-132. Morgan Kaufmann, 1992.
+13. Quaternion in molecular modeling. CFF Karney.
+    J Mol Graph Mod, 25(5):595-604
+14. New method for extracting the quaternion from a rotation matrix.
+    Itzhack Y Bar-Itzhack, J Guid Contr Dynam. 2000. 23(6): 1085-1087.
+15. Multiple View Geometry in Computer Vision. Hartley and Zissermann.
+    Cambridge University Press; 2nd Ed. 2004. Chapter 4, Algorithm 4.7, p 130.
+16. Column Vectors vs. Row Vectors.
+    http://steve.hollasch.net/cgindex/math/matrix/column-vec.html
 
 Examples
 --------
