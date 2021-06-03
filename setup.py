@@ -17,14 +17,21 @@ version = re.search(r"__version__ = '(.*?)'", code).groups()[0]
 
 description = re.search(r'"""(.*)\.(?:\r\n|\r|\n)', code).groups()[0]
 
-readme = re.search(r'(?:\r\n|\r|\n){2}"""(.*)"""(?:\r\n|\r|\n){2}__version__',
-                   code, re.MULTILINE | re.DOTALL).groups()[0]
+readme = re.search(
+    r'(?:\r\n|\r|\n){2}"""(.*)"""(?:\r\n|\r|\n){2}__version__',
+    code,
+    re.MULTILINE | re.DOTALL,
+).groups()[0]
 
-readme = '\n'.join([description, '=' * len(description)] +
-                   readme.splitlines()[1:])
+readme = '\n'.join(
+    [description, '=' * len(description)] + readme.splitlines()[1:]
+)
 
-license = re.search(r'(# Copyright.*?(?:\r\n|\r|\n))(?:\r\n|\r|\n)+""', code,
-                    re.MULTILINE | re.DOTALL).groups()[0]
+license = re.search(
+    r'(# Copyright.*?(?:\r\n|\r|\n))(?:\r\n|\r|\n)+""',
+    code,
+    re.MULTILINE | re.DOTALL,
+).groups()[0]
 
 license = license.replace('# ', '').replace('#', '')
 
@@ -38,16 +45,21 @@ if 'sdist' in sys.argv:
 
 class build_ext(_build_ext):
     """Delay import numpy until build."""
+
     def finalize_options(self):
         _build_ext.finalize_options(self)
         __builtins__.__NUMPY_SETUP__ = False
         import numpy
+
         self.include_dirs.append(numpy.get_include())
 
 
 ext_modules = [
-    Extension('transformations._transformations',
-              ['transformations/transformations.c'])]
+    Extension(
+        'transformations._transformations',
+        ['transformations/transformations.c'],
+    )
+]
 
 setup_args = dict(
     name='transformations',
@@ -57,9 +69,14 @@ setup_args = dict(
     author='Christoph Gohlke',
     author_email='cgohlke@uci.edu',
     url='https://www.lfd.uci.edu/~gohlke/',
+    project_urls={
+        'Bug Tracker': 'https://github.com/cgohlke/transformations/issues',
+        'Source Code': 'https://github.com/cgohlke/transformations',
+        # 'Documentation': 'https://',
+    },
     python_requires='>=3.6',
-    install_requires=['numpy>=1.14.5'],
-    setup_requires=['setuptools>=18.0', 'numpy>=1.14.5'],
+    install_requires=['numpy>=1.15.1'],
+    setup_requires=['setuptools>=18.0', 'numpy>=1.15.1'],
     cmdclass={'build_ext': build_ext},
     packages=['transformations'],
     license='BSD',
@@ -73,20 +90,23 @@ setup_args = dict(
         'Operating System :: OS Independent',
         'Programming Language :: C',
         'Programming Language :: Python :: 3 :: Only',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
     ],
 )
 
 try:
     if '--universal' in sys.argv:
         raise ValueError(
-            'Not building the _transformations C extension in universal mode')
+            'Not building the _transformations C extension in universal mode'
+        )
     setup(ext_modules=ext_modules, **setup_args)
 except Exception as e:
     warnings.warn(str(e))
     warnings.warn(
         'The _transformations C extension module was not built.\n'
-        'Using a fallback module with limited functionality and performance.')
+        'Using a fallback module with limited functionality and performance.'
+    )
     setup(**setup_args)
