@@ -16,18 +16,19 @@ functions to decompose transformation matrices.
 
 :License: BSD 3-Clause
 
-:Version: 2020.1.1
+:Version: 2021.6.6
 
 Requirements
 ------------
-* `CPython >= 3.6 <https://www.python.org>`_
-* `Numpy 1.14 <https://www.numpy.org>`_
+* `CPython >= 3.7 <https://www.python.org>`_
+* `Numpy 1.15 <https://www.numpy.org>`_
 
 Revisions
 ---------
+2021.6.6
+    Remove support for Python 3.6 (NEP 29).
 2020.1.1
     Remove support for Python 2.7 and 3.5.
-    Update copyright.
 2019.4.22
     Fix setup requirements.
 
