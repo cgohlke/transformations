@@ -1,7 +1,7 @@
 /* transformations.c */
 
 /*
-Copyright (c) 2006-2020, Christoph Gohlke
+Copyright (c) 2006-2021, Christoph Gohlke
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -45,11 +45,11 @@ Refer to the transformations.py module for documentation and tests.
 
 :License: BSD 3-Clause
 
-:Version: 2020.1.1
+:Version: 2021.6.6
 
 */
 
-#define _VERSION_ "2020.1.1"
+#define _VERSION_ "2021.6.6"
 
 #define WIN32_LEAN_AND_MEAN
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
