@@ -25,6 +25,8 @@ Requirements
 
 Revisions
 ---------
+2022.2.8
+    Add dimension checks to inputs of `superimposition_matrix`.
 2021.6.6
     Remove support for Python 3.6 (NEP 29).
 2020.1.1
