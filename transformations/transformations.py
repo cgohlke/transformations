@@ -207,7 +207,7 @@ True
 
 """
 
-__version__ = '2021.6.6'
+__version__ = '2022.2.8'
 
 import math
 
@@ -1073,6 +1073,8 @@ def superimposition_matrix(v0, v1, scale=False, usesvd=True):
     True
 
     """
+    if v0.shape != v1.shape or v0.ndim != 2 or v0.shape[0] not in (3, 4) or v0.shape[1] < 3:
+        raise ValueError("Invalid input shapes, v0 and v1 must be (3, N) or (4, N) for N points.")
     v0 = numpy.array(v0, dtype=numpy.float64, copy=False)[:3]
     v1 = numpy.array(v1, dtype=numpy.float64, copy=False)[:3]
     return affine_matrix_from_points(
