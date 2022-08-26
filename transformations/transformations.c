@@ -1,7 +1,7 @@
 /* transformations.c */
 
 /*
-Copyright (c) 2006-2021, Christoph Gohlke
+Copyright (c) 2006-2022, Christoph Gohlke
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -30,26 +30,19 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-/* Homogeneous Transformation Matrices and Quaternions.
+#define _DOC_ "Homogeneous Transformation Matrices and Quaternions.\n\
+\n\
+Transformations.c is a Python C extension module that provides faster\n\
+implementations for the transformations package.\n\
+\n\
+Refer to the transformations.py module for documentation and tests.\n\
+\n\
+:Author: `Christoph Gohlke <https://www.cgohlke.com>`_\n\
+:License: BSD 3-Clause\n\
+:Version: 2022.8.26\n\
+"
 
-Transformations.c is a Python C extension module to provide faster
-implementations for the transformations package.
-
-Refer to the transformations.py module for documentation and tests.
-
-:Author:
-  `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
-
-:Organization:
-  Laboratory for Fluorescence Dynamics. University of California, Irvine
-
-:License: BSD 3-Clause
-
-:Version: 2021.6.6
-
-*/
-
-#define _VERSION_ "2021.6.6"
+#define _VERSION_ "2022.8.26"
 
 #define WIN32_LEAN_AND_MEAN
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
@@ -2116,7 +2109,7 @@ static int axis2tuple(
     if (PyString_Check(axes) && (PyString_Size(axes) == 4)) {
         char *s = PyString_AS_STRING(axes);
 #else
-    if (PyUnicode_Check(axes) && (PyUnicode_GetSize(axes) == 4)) {
+    if (PyUnicode_Check(axes) && (PyUnicode_GET_LENGTH(axes) == 4)) {
         PyObject* axes_ascii = PyUnicode_AsASCIIString(axes);
         char *s = PyBytes_AsString(axes_ascii);
 #endif
@@ -3938,13 +3931,6 @@ py_eigenvector_of_symmetric_44(
 /*****************************************************************************/
 /* Python module */
 
-char module_doc[] =
-    "Homogeneous Transformation Matrices and Quaternions.\n\n"
-    "Refer to the transformations.py module for documentation and tests.\n\n"
-    "Authors:\n  Christoph Gohlke <http://www.lfd.uci.edu/~gohlke/>\n"
-    "  Laboratory for Fluorescence Dynamics, University of California, Irvine."
-    "\n\nVersion: %s\n";
-
 static PyMethodDef module_methods[] = {
     {"is_same_transform",
         (PyCFunction)py_is_same_transform,
@@ -4078,9 +4064,8 @@ PyInit__transformations(void)
 {
     PyObject *module;
 
-    char *doc = (char *)PyMem_Malloc(sizeof(module_doc) + sizeof(_VERSION_));
-    PyOS_snprintf(doc, sizeof(module_doc) + sizeof(_VERSION_),
-                  module_doc, _VERSION_);
+    char *doc = (char *)PyMem_Malloc(sizeof(_DOC_) + sizeof(_VERSION_));
+    PyOS_snprintf(doc, sizeof(_DOC_) + sizeof(_VERSION_), _DOC_, _VERSION_);
 
     moduledef.m_doc = doc;
     module = PyModule_Create(&moduledef);
