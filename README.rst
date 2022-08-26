@@ -8,43 +8,53 @@ as well as for converting between rotation matrices, Euler angles,
 and quaternions. Also includes an Arcball control object and
 functions to decompose transformation matrices.
 
-:Author:
-  `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
-
-:Organization:
-  Laboratory for Fluorescence Dynamics. University of California, Irvine
-
+:Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-
-:Version: 2021.6.6
+:Version: 2022.8.26
 
 Requirements
 ------------
-* `CPython >= 3.7 <https://www.python.org>`_
-* `Numpy 1.15 <https://www.numpy.org>`_
+
+This release has been tested with the following requirements and dependencies
+(other versions may work):
+
+- `CPython 3.8.10, 3.9.13, 3.10.6, 3.11.0rc1 <https://www.python.org>`_
+- `NumPy 1.22.4 <https://pypi.org/project/numpy/>`_
 
 Revisions
 ---------
+
+2022.8.26
+
+- Update metadata
+- Remove support for Python 3.7 (NEP 29).
+
 2021.6.6
-    Remove support for Python 3.6 (NEP 29).
+
+- Remove support for Python 3.6 (NEP 29).
+
 2020.1.1
-    Remove support for Python 2.7 and 3.5.
+
+- Remove support for Python 2.7 and 3.5.
+
 2019.4.22
-    Fix setup requirements.
+
+- Fix setup requirements.
 
 Notes
 -----
+
 Transformations.py is no longer actively developed and has a few known issues
 and numerical instabilities. The module is mostly superseded by other modules
 for 3D transformations and quaternions:
 
-* `Scipy.spatial.transform <https://github.com/scipy/scipy/tree/master/
+- `Scipy.spatial.transform <https://github.com/scipy/scipy/tree/master/
   scipy/spatial/transform>`_
-* `Transforms3d <https://github.com/matthew-brett/transforms3d>`_
+- `Transforms3d <https://github.com/matthew-brett/transforms3d>`_
   (includes most code of this module)
-* `Pytransform3d <https://github.com/rock-learning/pytransform3d>`_
-* `Numpy-quaternion <https://github.com/moble/quaternion>`_
-* `Blender.mathutils <https://docs.blender.org/api/master/mathutils.html>`_
+- `Pytransform3d <https://github.com/rock-learning/pytransform3d>`_
+- `Numpy-quaternion <https://github.com/moble/quaternion>`_
+- `Blender.mathutils <https://docs.blender.org/api/master/mathutils.html>`_
 
 The API is not stable yet and is expected to change between revisions.
 
@@ -93,6 +103,7 @@ be specified using a 4 character string or encoded 4-tuple:
 
 References
 ----------
+
 1.  Matrices and transformations. Ronald Goldman.
     In "Graphics Gems I", pp 472-475. Morgan Kaufmann, 1990.
 2.  More matrices and transformations: shear and pseudo-perspective.
@@ -128,6 +139,7 @@ References
 
 Examples
 --------
+
 >>> alpha, beta, gamma = 0.123, -1.234, 2.345
 >>> origin, xaxis, yaxis, zaxis = [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
 >>> I = identity_matrix()
