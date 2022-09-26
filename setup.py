@@ -24,7 +24,7 @@ version = search(r"__version__ = '(.*?)'", code)
 description = search(r'"""(.*)\.(?:\r\n|\r|\n)', code)
 
 readme = search(
-    r'(?:\r\n|\r|\n){2}"""(.*)"""(?:\r\n|\r|\n){2}__version__',
+    r'(?:\r\n|\r|\n){2}"""(.*)"""(?:\r\n|\r|\n){2}[__version__|from]',
     code,
     re.MULTILINE | re.DOTALL,
 )
@@ -54,7 +54,10 @@ class build_ext(_build_ext):
 
     def finalize_options(self):
         _build_ext.finalize_options(self)
-        __builtins__.__NUMPY_SETUP__ = False
+        if isinstance(__builtins__, dict):
+            __builtins__['__NUMPY_SETUP__'] = False
+        else:
+            setattr(__builtins__, '__NUMPY_SETUP__', False)
         import numpy
 
         self.include_dirs.append(numpy.get_include())
