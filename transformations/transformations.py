@@ -40,7 +40,7 @@ functions to decompose transformation matrices.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2022.8.26
+:Version: 2022.9.26
 
 Requirements
 ------------
@@ -48,11 +48,15 @@ Requirements
 This release has been tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython 3.8.10, 3.9.13, 3.10.6, 3.11.0rc1 <https://www.python.org>`_
+- `CPython 3.8.10, 3.9.13, 3.10.7, 3.11.0rc2 <https://www.python.org>`_
 - `NumPy 1.22.4 <https://pypi.org/project/numpy/>`_
 
 Revisions
 ---------
+
+2022.9.26
+
+- Add dimension check on superimposition_matrix (#2).
 
 2022.8.26
 
@@ -219,7 +223,7 @@ True
 
 """
 
-__version__ = '2022.8.26'
+__version__ = '2022.9.26'
 
 import math
 
@@ -1085,10 +1089,17 @@ def superimposition_matrix(v0, v1, scale=False, usesvd=True):
     True
 
     """
-    v0 = numpy.array(v0, dtype=numpy.float64, copy=False)[:3]
-    v1 = numpy.array(v1, dtype=numpy.float64, copy=False)[:3]
+    v0 = numpy.array(v0, dtype=numpy.float64, copy=False)
+    v1 = numpy.array(v1, dtype=numpy.float64, copy=False)
+    if (
+        v0.shape != v1.shape
+        or v0.ndim != 2
+        or v0.shape[0] not in (3, 4)
+        or v0.shape[1] < 3
+    ):
+        raise ValueError('invalid input shapes')
     return affine_matrix_from_points(
-        v0, v1, shear=False, scale=scale, usesvd=usesvd
+        v0[:3], v1[:3], shear=False, scale=scale, usesvd=usesvd
     )
 
 
