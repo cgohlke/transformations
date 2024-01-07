@@ -1,6 +1,20 @@
 include LICENSE
 include README.rst
+include CHANGES.rst
+
+include transformations/py.typed
+include transformations/transformations.c
+
+include .github/workflows/wheel.yml
+
+exclude *.cmd
+recursive-exclude doc *
+recursive-exclude docs *
+recursive-exclude test *
+recursive-exclude tests *
 
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
 recursive-exclude * *Copy*
+recursive-exclude * *-
+recursive-exclude * *.html
