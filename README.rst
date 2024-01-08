@@ -8,21 +8,40 @@ as well as for converting between rotation matrices, Euler angles,
 and quaternions. Also includes an Arcball control object and
 functions to decompose transformation matrices.
 
+The transformations library is no longer actively developed.
+
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2022.9.26
+:Version: 2024.6.1
+
+Quickstart
+----------
+
+Install the transformations package and all dependencies from the
+`Python Package Index <https://pypi.org/project/transformations/>`_::
+
+    python -m pip install -U transformations
+
+See `Examples`_ for using the programming interface.
+
+Source code and support are available on
+`GitHub <https://github.com/cgohlke/transformations>`_.
 
 Requirements
 ------------
 
-This release has been tested with the following requirements and dependencies
+This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython 3.8.10, 3.9.13, 3.10.7, 3.11.0rc2 <https://www.python.org>`_
-- `NumPy 1.22.4 <https://pypi.org/project/numpy/>`_
+- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.7, 3.12.1
+- `NumPy <https://pypi.org/project/numpy/>`_ 1.26.3
 
 Revisions
 ---------
+
+2024.6.1
+
+- Remove support for Python 3.8 and numpy 1.22 (NEP 29).
 
 2022.9.26
 
@@ -52,11 +71,11 @@ Transformations.py is no longer actively developed and has a few known issues
 and numerical instabilities. The module is mostly superseded by other modules
 for 3D transformations and quaternions:
 
+- `Pytransform3d <https://github.com/dfki-ric/pytransform3d>`_
 - `Scipy.spatial.transform <https://github.com/scipy/scipy/tree/master/
   scipy/spatial/transform>`_
 - `Transforms3d <https://github.com/matthew-brett/transforms3d>`_
   (includes most code of this module)
-- `Pytransform3d <https://github.com/rock-learning/pytransform3d>`_
 - `Numpy-quaternion <https://github.com/moble/quaternion>`_
 - `Blender.mathutils <https://docs.blender.org/api/master/mathutils.html>`_
 
