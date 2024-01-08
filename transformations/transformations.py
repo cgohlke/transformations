@@ -1,6 +1,6 @@
 # transformations.py
 
-# Copyright (c) 2006-2022, Christoph Gohlke
+# Copyright (c) 2006-2024, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -38,21 +38,40 @@ as well as for converting between rotation matrices, Euler angles,
 and quaternions. Also includes an Arcball control object and
 functions to decompose transformation matrices.
 
+The transformations library is no longer actively developed.
+
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2022.9.26
+:Version: 2024.6.1
+
+Quickstart
+----------
+
+Install the transformations package and all dependencies from the
+`Python Package Index <https://pypi.org/project/transformations/>`_::
+
+    python -m pip install -U transformations
+
+See `Examples`_ for using the programming interface.
+
+Source code and support are available on
+`GitHub <https://github.com/cgohlke/transformations>`_.
 
 Requirements
 ------------
 
-This release has been tested with the following requirements and dependencies
+This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython 3.8.10, 3.9.13, 3.10.7, 3.11.0rc2 <https://www.python.org>`_
-- `NumPy 1.22.4 <https://pypi.org/project/numpy/>`_
+- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.7, 3.12.1
+- `NumPy <https://pypi.org/project/numpy/>`_ 1.26.3
 
 Revisions
 ---------
+
+2024.6.1
+
+- Remove support for Python 3.8 and numpy 1.22 (NEP 29).
 
 2022.9.26
 
@@ -82,11 +101,11 @@ Transformations.py is no longer actively developed and has a few known issues
 and numerical instabilities. The module is mostly superseded by other modules
 for 3D transformations and quaternions:
 
+- `Pytransform3d <https://github.com/dfki-ric/pytransform3d>`_
 - `Scipy.spatial.transform <https://github.com/scipy/scipy/tree/master/
   scipy/spatial/transform>`_
 - `Transforms3d <https://github.com/matthew-brett/transforms3d>`_
   (includes most code of this module)
-- `Pytransform3d <https://github.com/rock-learning/pytransform3d>`_
 - `Numpy-quaternion <https://github.com/moble/quaternion>`_
 - `Blender.mathutils <https://docs.blender.org/api/master/mathutils.html>`_
 
@@ -223,7 +242,9 @@ True
 
 """
 
-__version__ = '2022.9.26'
+from __future__ import annotations
+
+__version__ = '2024.6.1'
 
 import math
 
@@ -312,13 +333,13 @@ def reflection_from_matrix(matrix):
     # normal: unit eigenvector corresponding to eigenvalue -1
     w, V = numpy.linalg.eig(M[:3, :3])
     i = numpy.where(abs(numpy.real(w) + 1.0) < 1e-8)[0]
-    if not len(i):
+    if len(i) == 0:
         raise ValueError('no unit eigenvector corresponding to eigenvalue -1')
     normal = numpy.real(V[:, i[0]]).squeeze()
     # point: any unit eigenvector corresponding to eigenvalue 1
     w, V = numpy.linalg.eig(M)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-8)[0]
-    if not len(i):
+    if len(i) == 0:
         raise ValueError('no unit eigenvector corresponding to eigenvalue 1')
     point = numpy.real(V[:, i[-1]]).squeeze()
     point /= point[3]
@@ -391,13 +412,13 @@ def rotation_from_matrix(matrix):
     # direction: unit eigenvector of R33 corresponding to eigenvalue of 1
     w, W = numpy.linalg.eig(R33.T)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-8)[0]
-    if not len(i):
+    if len(i) == 0:
         raise ValueError('no unit eigenvector corresponding to eigenvalue 1')
     direction = numpy.real(W[:, i[-1]]).squeeze()
     # point: unit eigenvector of R33 corresponding to eigenvalue of 1
     w, Q = numpy.linalg.eig(R)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-8)[0]
-    if not len(i):
+    if len(i) == 0:
         raise ValueError('no unit eigenvector corresponding to eigenvalue 1')
     point = numpy.real(Q[:, i[-1]]).squeeze()
     point /= point[3]
@@ -487,7 +508,7 @@ def scale_from_matrix(matrix):
     # origin: any eigenvector corresponding to eigenvalue 1
     w, V = numpy.linalg.eig(M)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-8)[0]
-    if not len(i):
+    if len(i) == 0:
         raise ValueError('no eigenvector corresponding to eigenvalue 1')
     origin = numpy.real(V[:, i[-1]]).squeeze()
     origin /= origin[3]
@@ -594,42 +615,39 @@ def projection_from_matrix(matrix, pseudo=False):
     M33 = M[:3, :3]
     w, V = numpy.linalg.eig(M)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-8)[0]
-    if not pseudo and len(i):
+    if not pseudo and len(i) > 0:
         # point: any eigenvector corresponding to eigenvalue 1
         point = numpy.real(V[:, i[-1]]).squeeze()
         point /= point[3]
         # direction: unit eigenvector corresponding to eigenvalue 0
         w, V = numpy.linalg.eig(M33)
         i = numpy.where(abs(numpy.real(w)) < 1e-8)[0]
-        if not len(i):
+        if len(i) == 0:
             raise ValueError('no eigenvector corresponding to eigenvalue 0')
         direction = numpy.real(V[:, i[0]]).squeeze()
         direction /= vector_norm(direction)
         # normal: unit eigenvector of M33.T corresponding to eigenvalue 0
         w, V = numpy.linalg.eig(M33.T)
         i = numpy.where(abs(numpy.real(w)) < 1e-8)[0]
-        if len(i):
+        if len(i) > 0:
             # parallel projection
             normal = numpy.real(V[:, i[0]]).squeeze()
             normal /= vector_norm(normal)
             return point, normal, direction, None, False
-        else:
-            # orthogonal projection, where normal equals direction vector
-            return point, direction, None, None, False
-    else:
-        # perspective projection
-        i = numpy.where(abs(numpy.real(w)) > 1e-8)[0]
-        if not len(i):
-            raise ValueError(
-                'no eigenvector not corresponding to eigenvalue 0'
-            )
-        point = numpy.real(V[:, i[-1]]).squeeze()
-        point /= point[3]
-        normal = -M[3, :3]
-        perspective = M[:3, 3] / numpy.dot(point[:3], normal)
-        if pseudo:
-            perspective -= normal
-        return point, normal, None, perspective, pseudo
+        # orthogonal projection, where normal equals direction vector
+        return point, direction, None, None, False
+
+    # perspective projection
+    i = numpy.where(abs(numpy.real(w)) > 1e-8)[0]
+    if len(i) == 0:
+        raise ValueError('no eigenvector not corresponding to eigenvalue 0')
+    point = numpy.real(V[:, i[-1]]).squeeze()
+    point /= point[3]
+    normal = -M[3, :3]
+    perspective = M[:3, 3] / numpy.dot(point[:3], normal)
+    if pseudo:
+        perspective -= normal
+    return point, normal, None, perspective, pseudo
 
 
 def clip_matrix(left, right, bottom, top, near, far, perspective=False):
@@ -739,7 +757,7 @@ def shear_from_matrix(matrix):
     w, V = numpy.linalg.eig(M33)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-4)[0]
     if len(i) < 2:
-        raise ValueError('no two linear independent eigenvectors found %s' % w)
+        raise ValueError(f'no two linear independent eigenvectors found {w}')
     V = numpy.real(V[:, i]).squeeze().T
     lenorm = -1.0
     for i0, i1 in ((0, 1), (0, 2), (1, 2)):
@@ -757,7 +775,7 @@ def shear_from_matrix(matrix):
     # point: eigenvector corresponding to eigenvalue 1
     w, V = numpy.linalg.eig(M)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-8)[0]
-    if not len(i):
+    if len(i) == 0:
         raise ValueError('no eigenvector corresponding to eigenvalue 1')
     point = numpy.real(V[:, i[-1]]).squeeze()
     point /= point[3]
@@ -1722,8 +1740,7 @@ def arcball_map_to_sphere(point, center, radius):
         # position outside of sphere
         n = math.sqrt(n)
         return numpy.array([v0 / n, v1 / n, 0.0])
-    else:
-        return numpy.array([v0, v1, math.sqrt(1.0 - n)])
+    return numpy.array([v0, v1, math.sqrt(1.0 - n)])
 
 
 def arcball_constrain_to_axis(point, axis):
@@ -2030,6 +2047,7 @@ def _import_module(name, package=None, warn=True, postfix='_py', ignore='_'):
                     warnings.warn('no Python implementation of ' + attr)
             globals()[attr] = getattr(module, attr)
         return True
+    return None
 
 
 _import_module('_transformations', __package__)
