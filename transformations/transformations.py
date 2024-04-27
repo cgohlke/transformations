@@ -42,7 +42,7 @@ The transformations library is no longer actively developed.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2024.6.1
+:Version: 2024.4.24
 
 Quickstart
 ----------
@@ -63,13 +63,17 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.7, 3.12.1
-- `NumPy <https://pypi.org/project/numpy/>`_ 1.26.3
+- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.9, 3.12.3
+- `NumPy <https://pypi.org/project/numpy/>`_ 1.26.4
 
 Revisions
 ---------
 
-2024.6.1
+2024.4.24
+
+- Support NumPy 2.
+
+2024.1.6
 
 - Remove support for Python 3.8 and numpy 1.22 (NEP 29).
 
@@ -244,7 +248,7 @@ True
 
 from __future__ import annotations
 
-__version__ = '2024.6.1'
+__version__ = '2024.4.24'
 
 import math
 
@@ -288,7 +292,7 @@ def translation_from_matrix(matrix):
     True
 
     """
-    return numpy.array(matrix, copy=False)[:3, 3].copy()
+    return numpy.asarray(matrix)[:3, 3].copy()
 
 
 def reflection_matrix(point, normal):
@@ -329,7 +333,7 @@ def reflection_from_matrix(matrix):
     True
 
     """
-    M = numpy.array(matrix, dtype=numpy.float64, copy=False)
+    M = numpy.asarray(matrix, dtype=numpy.float64)
     # normal: unit eigenvector corresponding to eigenvalue -1
     w, V = numpy.linalg.eig(M[:3, :3])
     i = numpy.where(abs(numpy.real(w) + 1.0) < 1e-8)[0]
@@ -389,7 +393,7 @@ def rotation_matrix(angle, direction, point=None):
     M[:3, :3] = R
     if point is not None:
         # rotation not around origin
-        point = numpy.array(point[:3], dtype=numpy.float64, copy=False)
+        point = numpy.asarray(point[:3], dtype=numpy.float64)
         M[:3, 3] = point - numpy.dot(R, point)
     return M
 
@@ -407,7 +411,7 @@ def rotation_from_matrix(matrix):
     True
 
     """
-    R = numpy.array(matrix, dtype=numpy.float64, copy=False)
+    R = numpy.asarray(matrix, dtype=numpy.float64)
     R33 = R[:3, :3]
     # direction: unit eigenvector of R33 corresponding to eigenvalue of 1
     w, W = numpy.linalg.eig(R33.T)
@@ -492,7 +496,7 @@ def scale_from_matrix(matrix):
     True
 
     """
-    M = numpy.array(matrix, dtype=numpy.float64, copy=False)
+    M = numpy.asarray(matrix, dtype=numpy.float64)
     M33 = M[:3, :3]
     factor = numpy.trace(M33) - 2.0
     try:
@@ -549,13 +553,11 @@ def projection_matrix(
 
     """
     M = numpy.identity(4)
-    point = numpy.array(point[:3], dtype=numpy.float64, copy=False)
+    point = numpy.asarray(point[:3], dtype=numpy.float64)
     normal = unit_vector(normal[:3])
     if perspective is not None:
         # perspective projection
-        perspective = numpy.array(
-            perspective[:3], dtype=numpy.float64, copy=False
-        )
+        perspective = numpy.asarray(perspective[:3], dtype=numpy.float64)
         M[0, 0] = M[1, 1] = M[2, 2] = numpy.dot(perspective - point, normal)
         M[:3, :3] -= numpy.outer(perspective, normal)
         if pseudo:
@@ -568,7 +570,7 @@ def projection_matrix(
         M[3, 3] = numpy.dot(perspective, normal)
     elif direction is not None:
         # parallel projection
-        direction = numpy.array(direction[:3], dtype=numpy.float64, copy=False)
+        direction = numpy.asarray(direction[:3], dtype=numpy.float64)
         scale = numpy.dot(direction, normal)
         M[:3, :3] -= numpy.outer(direction, normal) / scale
         M[:3, 3] = direction * (numpy.dot(point, normal) / scale)
@@ -611,7 +613,7 @@ def projection_from_matrix(matrix, pseudo=False):
     True
 
     """
-    M = numpy.array(matrix, dtype=numpy.float64, copy=False)
+    M = numpy.asarray(matrix, dtype=numpy.float64)
     M33 = M[:3, :3]
     w, V = numpy.linalg.eig(M)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-8)[0]
@@ -751,7 +753,7 @@ def shear_from_matrix(matrix):
     True
 
     """
-    M = numpy.array(matrix, dtype=numpy.float64, copy=False)
+    M = numpy.asarray(matrix, dtype=numpy.float64)
     M33 = M[:3, :3]
     # normal: cross independent eigenvectors corresponding to the eigenvalue 1
     w, V = numpy.linalg.eig(M33)
@@ -1107,8 +1109,8 @@ def superimposition_matrix(v0, v1, scale=False, usesvd=True):
     True
 
     """
-    v0 = numpy.array(v0, dtype=numpy.float64, copy=False)
-    v1 = numpy.array(v1, dtype=numpy.float64, copy=False)
+    v0 = numpy.asarray(v0, dtype=numpy.float64)
+    v1 = numpy.asarray(v1, dtype=numpy.float64)
     if (
         v0.shape != v1.shape
         or v0.ndim != 2
@@ -1213,7 +1215,7 @@ def euler_from_matrix(matrix, axes='sxyz'):
     j = _NEXT_AXIS[i + parity]
     k = _NEXT_AXIS[i - parity + 1]
 
-    M = numpy.array(matrix, dtype=numpy.float64, copy=False)[:3, :3]
+    M = numpy.asarray(matrix, dtype=numpy.float64)[:3, :3]
     if repetition:
         sy = math.sqrt(M[i, j] * M[i, j] + M[i, k] * M[i, k])
         if sy > _EPS:
@@ -1410,7 +1412,7 @@ def quaternion_from_matrix(matrix, isprecise=False):
     True
 
     """
-    M = numpy.array(matrix, dtype=numpy.float64, copy=False)[:4, :4]
+    M = numpy.asarray(matrix, dtype=numpy.float64)[:4, :4]
     if isprecise:
         q = numpy.empty((4,))
         t = numpy.trace(M)
@@ -1761,7 +1763,7 @@ def arcball_constrain_to_axis(point, axis):
 
 def arcball_nearest_axis(point, axes):
     """Return axis, which arc is nearest to point."""
-    point = numpy.array(point, dtype=numpy.float64, copy=False)
+    point = numpy.asarray(point, dtype=numpy.float64)
     nearest = None
     mx = -1.0
     for axis in axes:
@@ -1881,7 +1883,7 @@ def unit_vector(data, axis=None, out=None):
             return data
     else:
         if out is not data:
-            out[:] = numpy.array(data, copy=False)
+            out[:] = numpy.asarray(data)
         data = out
     length = numpy.atleast_1d(numpy.sum(data * data, axis))
     numpy.sqrt(length, length)
@@ -1953,8 +1955,8 @@ def angle_between_vectors(v0, v1, directed=True, axis=0):
     True
 
     """
-    v0 = numpy.array(v0, dtype=numpy.float64, copy=False)
-    v1 = numpy.array(v1, dtype=numpy.float64, copy=False)
+    v0 = numpy.asarray(v0, dtype=numpy.float64)
+    v1 = numpy.asarray(v1, dtype=numpy.float64)
     dot = numpy.sum(v0 * v1, axis=axis)
     dot /= vector_norm(v0, axis=axis) * vector_norm(v1, axis=axis)
     dot = numpy.clip(dot, -1.0, 1.0)
