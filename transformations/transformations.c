@@ -39,13 +39,13 @@ Refer to the transformations.py module for documentation and tests.\n\
 \n\
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_\n\
 :License: BSD 3-Clause\n\
-:Version: 2024.6.1\n\
+:Version: 2024.4.24\n\
 "
 
-#define _VERSION_ "2024.6.1"
+#define _VERSION_ "2024.4.24"
 
 #define WIN32_LEAN_AND_MEAN
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#define NPY_NO_DEPRECATED_API NPY_2_0_API_VERSION
 
 #include "Python.h"
 
