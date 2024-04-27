@@ -5,6 +5,8 @@ import random
 import numpy
 import pytest
 
+numpy.set_printoptions(legacy='1.21')
+
 
 @pytest.fixture(autouse=True)
 def doctest_config(doctest_namespace):
