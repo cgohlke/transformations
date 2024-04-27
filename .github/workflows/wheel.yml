@@ -12,10 +12,11 @@ jobs:
         os: [ubuntu-22.04, macos-12, windows-2019]
     steps:
       - uses: actions/checkout@v4
-      - uses: pypa/cibuildwheel@v2.16.2
+      - uses: pypa/cibuildwheel@v2.17.0
         env:
+          # CIBW_ENVIRONMENT: "PIP_PRE=1"
+          CIBW_BUILD_VERBOSITY: 3
           CIBW_SKIP: "pp* cp37* cp38* *musllinux* *i686 *ppc64le *s390x cp39*win*arm64 cp310*win*arm64"
-          CIBW_BEFORE_BUILD: python -m pip install numpy
           # CIBW_ARCHS_LINUX: auto aarch64
           CIBW_ARCHS_LINUX: auto
           CIBW_ARCHS_MACOS: x86_64 arm64
