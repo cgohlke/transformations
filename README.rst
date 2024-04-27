@@ -12,7 +12,7 @@ The transformations library is no longer actively developed.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2024.6.1
+:Version: 2024.4.24
 
 Quickstart
 ----------
@@ -33,13 +33,17 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.7, 3.12.1
-- `NumPy <https://pypi.org/project/numpy/>`_ 1.26.3
+- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.9, 3.12.3
+- `NumPy <https://pypi.org/project/numpy/>`_ 1.26.4
 
 Revisions
 ---------
 
-2024.6.1
+2024.4.24
+
+- Support NumPy 2.
+
+2024.1.6
 
 - Remove support for Python 3.8 and numpy 1.22 (NEP 29).
 
