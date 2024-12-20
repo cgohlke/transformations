@@ -84,7 +84,7 @@ setup(
         'Source Code': 'https://github.com/cgohlke/transformations',
         # 'Documentation': 'https://',
     },
-    python_requires='>=3.9',
+    python_requires='>=3.10',
     install_requires=['numpy'],
     packages=['transformations'],
     ext_modules=[
@@ -104,9 +104,9 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: C',
         'Programming Language :: Python :: 3 :: Only',
-        'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
     ],
 )
