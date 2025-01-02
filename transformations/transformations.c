@@ -1,7 +1,7 @@
 /* transformations.c */
 
 /*
-Copyright (c) 2006-2024, Christoph Gohlke
+Copyright (c) 2006-2025, Christoph Gohlke
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -39,10 +39,10 @@ Refer to the transformations.py module for documentation and tests.\n\
 \n\
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_\n\
 :License: BSD 3-Clause\n\
-:Version: 2024.5.24\n\
+:Version: 2025.1.1\n\
 "
 
-#define _VERSION_ "2024.5.24"
+#define _VERSION_ "2025.1.1"
 
 #define WIN32_LEAN_AND_MEAN
 #define NPY_NO_DEPRECATED_API NPY_2_0_API_VERSION
