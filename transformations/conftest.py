@@ -1,5 +1,6 @@
 """Pytest configuration."""
 
+import math
 import random
 
 import numpy
@@ -12,5 +13,6 @@ numpy.set_printoptions(legacy='1.21')
 def doctest_config(doctest_namespace):
     """Add random and numpy to doctest namespace."""
     numpy.set_printoptions(suppress=True, precision=5)
+    doctest_namespace['math'] = math
     doctest_namespace['numpy'] = numpy
     doctest_namespace['random'] = random
