@@ -1,6 +1,6 @@
 # transformations.py
 
-# Copyright (c) 2006-2024, Christoph Gohlke
+# Copyright (c) 2006-2025, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,7 @@ The transformations library is no longer actively developed.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2024.5.24
+:Version: 2025.1.1
 
 Quickstart
 ----------
@@ -63,11 +63,15 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.9, 3.12.3
-- `NumPy <https://pypi.org/project/numpy/>`_ 1.26.4
+- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.8, 3.13.1 64-bit
+- `NumPy <https://pypi.org/project/numpy/>`_ 2.1.3
 
 Revisions
 ---------
+
+2025.1.1
+
+- Drop support for Python 3.9, support Python 3.13.
 
 2024.5.24
 
@@ -252,7 +256,56 @@ True
 
 from __future__ import annotations
 
-__version__ = '2024.5.24'
+__version__ = '2025.1.1'
+
+__all__ = [
+    '__version__',
+    'affine_matrix_from_points',
+    'angle_between_vectors',
+    'arcball_constrain_to_axis',
+    'arcball_map_to_sphere',
+    'arcball_nearest_axis',
+    'clip_matrix',
+    'compose_matrix',
+    'concatenate_matrices',
+    'decompose_matrix',
+    'euler_from_matrix',
+    'euler_from_quaternion',
+    'euler_matrix',
+    'identity_matrix',
+    'inverse_matrix',
+    'is_same_transform',
+    'orthogonalization_matrix',
+    'projection_from_matrix',
+    'projection_matrix',
+    'quaternion_about_axis',
+    'quaternion_conjugate',
+    'quaternion_from_euler',
+    'quaternion_from_matrix',
+    'quaternion_imag',
+    'quaternion_inverse',
+    'quaternion_matrix',
+    'quaternion_multiply',
+    'quaternion_real',
+    'quaternion_slerp',
+    'random_quaternion',
+    'random_rotation_matrix',
+    'random_vector',
+    'reflection_from_matrix',
+    'reflection_matrix',
+    'rotation_from_matrix',
+    'rotation_matrix',
+    'scale_from_matrix',
+    'scale_matrix',
+    'shear_from_matrix',
+    'shear_matrix',
+    'superimposition_matrix',
+    'translation_from_matrix',
+    'translation_matrix',
+    'unit_vector',
+    'vector_norm',
+    'vector_product',
+]
 
 import math
 
@@ -265,7 +318,7 @@ def identity_matrix():
     >>> I = identity_matrix()
     >>> numpy.allclose(I, numpy.dot(I, I))
     True
-    >>> numpy.sum(I), numpy.trace(I)
+    >>> float(numpy.sum(I)), float(numpy.trace(I))
     (4.0, 4.0)
     >>> numpy.allclose(I, numpy.identity(4))
     True
@@ -771,7 +824,7 @@ def shear_from_matrix(matrix):
         n = numpy.cross(V[i0], V[i1])
         w = vector_norm(n)
         if w > lenorm:
-            lenorm = w
+            lenorm = w  # type: ignore[assignment]
             normal = n
     normal /= lenorm
     # direction and angle
@@ -811,7 +864,7 @@ def decompose_matrix(matrix):
     True
     >>> S = scale_matrix(0.123)
     >>> scale, shear, angles, trans, persp = decompose_matrix(S)
-    >>> scale[0]
+    >>> float(scale[0])
     0.123
     >>> R0 = euler_matrix(1, 2, 3)
     >>> scale, shear, angles, trans, persp = decompose_matrix(R0)
@@ -1708,7 +1761,7 @@ class Arcball:
 
     def setaxes(self, *axes):
         """Set axes to constrain rotations."""
-        if axes is None:
+        if len(axes) == 0:
             self._axes = None
         else:
             self._axes = [unit_vector(axis) for axis in axes]
@@ -1865,11 +1918,11 @@ def vector_norm(data, axis=None, out=None):
             return math.sqrt(numpy.dot(data, data))
         data *= data
         out = numpy.atleast_1d(numpy.sum(data, axis=axis))
-        numpy.sqrt(out, out)
+        numpy.sqrt(out, out=out)
         return out
     data *= data
     numpy.sum(data, axis=axis, out=out)
-    numpy.sqrt(out, out)
+    numpy.sqrt(out, out=out)
     return None
 
 
@@ -1896,7 +1949,7 @@ def unit_vector(data, axis=None, out=None):
     >>> list(unit_vector([]))
     []
     >>> list(unit_vector([1]))
-    [1.0]
+    [...1.0...]
 
     """
     if out is None:
@@ -1922,11 +1975,11 @@ def random_vector(size):
     """Return array of random doubles in the half-open interval [0.0, 1.0).
 
     >>> v = random_vector(10000)
-    >>> numpy.all(v >= 0) and numpy.all(v < 1)
+    >>> bool(numpy.all(v >= 0) and numpy.all(v < 1))
     True
     >>> v0 = random_vector(10)
     >>> v1 = random_vector(10)
-    >>> numpy.any(v0 == v1)
+    >>> bool(numpy.any(v0 == v1))
     False
 
     """
@@ -2070,6 +2123,7 @@ def _import_module(name, package=None, warn=True, postfix='_py', ignore='_'):
             if postfix:
                 if attr in globals():
                     globals()[attr + postfix] = globals()[attr]
+                    __all__.append(attr + postfix)
                 elif warn:
                     warnings.warn('no Python implementation of ' + attr)
             globals()[attr] = getattr(module, attr)
@@ -2085,4 +2139,6 @@ if __name__ == '__main__':
     import random  # noqa: used in doctests
 
     numpy.set_printoptions(suppress=True, precision=5)
-    doctest.testmod()
+    doctest.testmod(optionflags=doctest.ELLIPSIS)
+
+# mypy: allow-untyped-defs, allow-untyped-calls
