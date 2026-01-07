@@ -10,7 +10,7 @@ numpy.set_printoptions(legacy='1.21')
 
 
 @pytest.fixture(autouse=True)
-def doctest_config(doctest_namespace):
+def doctest_config(doctest_namespace) -> None:
     """Add random and numpy to doctest namespace."""
     numpy.set_printoptions(suppress=True, precision=5)
     doctest_namespace['math'] = math
