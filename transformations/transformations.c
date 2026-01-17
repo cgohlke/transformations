@@ -1,7 +1,7 @@
 /* transformations.c */
 
 /*
-Copyright (c) 2006-2025, Christoph Gohlke
+Copyright (c) 2006-2026, Christoph Gohlke
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -39,10 +39,10 @@ Refer to the transformations.py module for documentation and tests.\n\
 \n\
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_\n\
 :License: BSD-3-Clause\n\
-:Version: 2025.8.1\n\
+:Version: 2026.1.18\n\
 "
 
-#define _VERSION_ "2025.8.1"
+#define _VERSION_ "2026.1.18"
 
 #define WIN32_LEAN_AND_MEAN
 #define NPY_NO_DEPRECATED_API NPY_2_0_API_VERSION
@@ -661,42 +661,45 @@ int quaternion_matrix(
     double *matrix)  /* double[16] */
 {
     double *M = matrix;
-    double *q = quat;
-    double n = sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
+    double w = quat[0];
+    double x = quat[1];
+    double y = quat[2];
+    double z = quat[3];
+    double n = sqrt(w*w + x*x + y*y + z*z);
 
     if (n < EPSILON) {
         /* return identity matrix */
         memset(M, 0, 16*sizeof(double));
         M[0] = M[5] = M[10] = M[15] = 1.0;
     } else {
-        q[0] /= n;
-        q[1] /= n;
-        q[2] /= n;
-        q[3] /= n;
+        w /= n;
+        x /= n;
+        y /= n;
+        z /= n;
         {
-            double x2 = q[1]+q[1];
-            double y2 = q[2]+q[2];
-            double z2 = q[3]+q[3];
+            double x2 = x+x;
+            double y2 = y+y;
+            double z2 = z+z;
             {
-                double xx2 = q[1]*x2;
-                double yy2 = q[2]*y2;
-                double zz2 = q[3]*z2;
+                double xx2 = x*x2;
+                double yy2 = y*y2;
+                double zz2 = z*z2;
                 M[0]  = 1.0 - yy2 - zz2;
                 M[5]  = 1.0 - xx2 - zz2;
                 M[10] = 1.0 - xx2 - yy2;
             }{
-                double yz2 = q[2]*z2;
-                double wx2 = q[0]*x2;
+                double yz2 = y*z2;
+                double wx2 = w*x2;
                 M[6] = yz2 - wx2;
                 M[9] = yz2 + wx2;
             }{
-                double xy2 = q[1]*y2;
-                double wz2 = q[0]*z2;
+                double xy2 = x*y2;
+                double wz2 = w*z2;
                 M[1] = xy2 - wz2;
                 M[4] = xy2 + wz2;
             }{
-                double xz2 = q[1]*z2;
-                double wy2 = q[0]*y2;
+                double xz2 = x*z2;
+                double wy2 = w*y2;
                 M[8] = xz2 - wy2;
                 M[2] = xz2 + wy2;
             }
@@ -973,23 +976,13 @@ long PySequence_GetInteger(PyObject *obj, Py_ssize_t i)
 {
     long value;
     PyObject *item = PySequence_GetItem(obj, i);
-    if (item == NULL ||
-#if PY_MAJOR_VERSION < 3
-        !PyInt_Check(item)
-#else
-        !PyLong_Check(item)
-#endif
-        ) {
+    if (item == NULL || !PyLong_Check(item)) {
         PyErr_Format(PyExc_ValueError, "expected integer number");
         Py_XDECREF(item);
         return -1;
     }
 
-#if PY_MAJOR_VERSION < 3
-    value = PyInt_AsLong(item);
-#else
     value = PyLong_AsLong(item);
-#endif
     Py_XDECREF(item);
     return value;
 }
@@ -2105,14 +2098,13 @@ static int axis2tuple(
         return 0;
 
     /* axes strings */
-#if PY_MAJOR_VERSION < 3
-    if (PyString_Check(axes) && (PyString_Size(axes) == 4)) {
-        char *s = PyString_AS_STRING(axes);
-#else
     if (PyUnicode_Check(axes) && (PyUnicode_GET_LENGTH(axes) == 4)) {
         PyObject* axes_ascii = PyUnicode_AsASCIIString(axes);
         char *s = PyBytes_AsString(axes_ascii);
-#endif
+        if (s == NULL) {
+            Py_XDECREF(axes_ascii);
+            return -1;
+        }
         int hash = *((int *)s);
         switch (hash)
         {
@@ -2192,9 +2184,7 @@ static int axis2tuple(
             PyErr_Format(PyExc_ValueError, "invalid axes string");
             return -1;
         }
-#if PY_MAJOR_VERSION > 2
         Py_XDECREF(axes_ascii);
-#endif
         return 0;
     }
 
@@ -3380,7 +3370,7 @@ py_arcball_constrain_to_axis(
 Vector length along axis of ndarray.
 */
 char py_vector_norm_doc[] =
-    "Return length, i.e. eucledian norm, of ndarray along axis.";
+    "Return length, i.e. euclidean norm, of ndarray along axis.";
 
 static PyObject *
 py_vector_norm(
@@ -3549,7 +3539,7 @@ py_vector_norm(
 Normalize ndarray by vector length along axis.
 */
 char py_unit_vector_doc[] =
-    "Return ndarray normalized by length, i.e. eucledian norm, along axis.";
+    "Return ndarray normalized by length, i.e. euclidean norm, along axis.";
 
 static PyObject *
 py_unit_vector(
@@ -4047,13 +4037,33 @@ static int module_clear(PyObject *m) {
     return 0;
 }
 
+static int module_exec(PyObject *module) {
+    if (_import_array() < 0) {
+        return -1;
+    }
+    PyObject *s = PyUnicode_FromString(_VERSION_);
+    if (!s) return -1;
+    PyObject *dict = PyModule_GetDict(module);
+    if (PyDict_SetItemString(dict, "__version__", s) < 0) {
+        Py_DECREF(s);
+        return -1;
+    }
+    Py_DECREF(s);
+    return 0;
+}
+
+static struct PyModuleDef_Slot module_slots[] = {
+    {Py_mod_exec, module_exec},
+    {0, NULL}
+};
+
 static struct PyModuleDef moduledef = {
     PyModuleDef_HEAD_INIT,
     "_transformations",
-    NULL,
+    _DOC_,
     sizeof(struct module_state),
     module_methods,
-    NULL,
+    module_slots,
     module_traverse,
     module_clear,
     NULL
@@ -4062,38 +4072,5 @@ static struct PyModuleDef moduledef = {
 PyMODINIT_FUNC
 PyInit__transformations(void)
 {
-    PyObject *module;
-
-    char *doc = (char *)PyMem_Malloc(sizeof(_DOC_) + sizeof(_VERSION_));
-    PyOS_snprintf(doc, sizeof(_DOC_) + sizeof(_VERSION_), _DOC_, _VERSION_);
-
-    moduledef.m_doc = doc;
-    module = PyModule_Create(&moduledef);
-
-    PyMem_Free(doc);
-
-    if (module == NULL)
-        return NULL;
-
-#ifdef Py_GIL_DISABLED
-    /* this module supports running with the GIL disabled */
-    if (PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED) < 0) {
-        Py_DECREF(module);
-        return NULL;
-    }
-#endif
-
-    if (_import_array() < 0) {
-        Py_DECREF(module);
-        return NULL;
-    }
-
-    {
-    PyObject *s = PyUnicode_FromString(_VERSION_);
-    PyObject *dict = PyModule_GetDict(module);
-    PyDict_SetItemString(dict, "__version__", s);
-    Py_DECREF(s);
-    }
-
-    return module;
+    return PyModuleDef_Init(&moduledef);
 }
