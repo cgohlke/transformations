@@ -1,6 +1,6 @@
 # transformations.py
 
-# Copyright (c) 2006-2025, Christoph Gohlke
+# Copyright (c) 2006-2026, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,7 @@ The transformations library is no longer actively developed.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2025.8.1
+:Version: 2026.1.18
 
 Quickstart
 ----------
@@ -63,11 +63,16 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.5, 3.14.0rc 64-bit
-- `NumPy <https://pypi.org/project/numpy/>`_ 2.3.2
+- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.11, 3.14.2 64-bit
+- `NumPy <https://pypi.org/project/numpy/>`_ 2.4.1
 
 Revisions
 ---------
+
+2026.1.18
+
+- Use multi-phase initialization.
+- Improve code quality.
 
 2025.8.1
 
@@ -87,28 +92,9 @@ Revisions
 
 2024.1.6
 
-- Remove support for Python 3.8 and numpy 1.22 (NEP 29).
+- …
 
-2022.9.26
-
-- Add dimension check on superimposition_matrix (#2).
-
-2022.8.26
-
-- Update metadata
-- Remove support for Python 3.7 (NEP 29).
-
-2021.6.6
-
-- Remove support for Python 3.6 (NEP 29).
-
-2020.1.1
-
-- Remove support for Python 2.7 and 3.5.
-
-2019.4.22
-
-- Fix setup requirements.
+Refer to the CHANGES file for older revisions.
 
 Notes
 -----
@@ -260,9 +246,11 @@ True
 
 from __future__ import annotations
 
-__version__ = '2025.8.1'
+__version__ = '2026.1.18'
 
 __all__ = [
+    '_AXES2TUPLE',
+    '_TUPLE2AXES',
     '__version__',
     'affine_matrix_from_points',
     'angle_between_vectors',
@@ -310,13 +298,13 @@ __all__ = [
     'unit_vector',
     'vector_norm',
     'vector_product',
-    '_AXES2TUPLE',
-    '_TUPLE2AXES',
 ]
 
 import math
 
 import numpy
+
+RNG = numpy.random.default_rng()
 
 
 def identity_matrix():
@@ -402,13 +390,15 @@ def reflection_from_matrix(matrix):
     w, V = numpy.linalg.eig(M[:3, :3])
     i = numpy.where(abs(numpy.real(w) + 1.0) < 1e-8)[0]
     if len(i) == 0:
-        raise ValueError('no unit eigenvector corresponding to eigenvalue -1')
+        msg = 'no unit eigenvector corresponding to eigenvalue -1'
+        raise ValueError(msg)
     normal = numpy.real(V[:, i[0]]).squeeze()
     # point: any unit eigenvector corresponding to eigenvalue 1
     w, V = numpy.linalg.eig(M)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-8)[0]
     if len(i) == 0:
-        raise ValueError('no unit eigenvector corresponding to eigenvalue 1')
+        msg = 'no unit eigenvector corresponding to eigenvalue 1'
+        raise ValueError(msg)
     point = numpy.real(V[:, i[-1]]).squeeze()
     point /= point[3]
     return point, normal
@@ -482,13 +472,15 @@ def rotation_from_matrix(matrix):
     w, W = numpy.linalg.eig(R33.T)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-8)[0]
     if len(i) == 0:
-        raise ValueError('no unit eigenvector corresponding to eigenvalue 1')
+        msg = 'no unit eigenvector corresponding to eigenvalue 1'
+        raise ValueError(msg)
     direction = numpy.real(W[:, i[-1]]).squeeze()
     # point: unit eigenvector of R33 corresponding to eigenvalue of 1
     w, Q = numpy.linalg.eig(R)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-8)[0]
     if len(i) == 0:
-        raise ValueError('no unit eigenvector corresponding to eigenvalue 1')
+        msg = 'no unit eigenvector corresponding to eigenvalue 1'
+        raise ValueError(msg)
     point = numpy.real(Q[:, i[-1]]).squeeze()
     point /= point[3]
     # rotation angle depending on direction
@@ -578,14 +570,19 @@ def scale_from_matrix(matrix):
     w, V = numpy.linalg.eig(M)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-8)[0]
     if len(i) == 0:
-        raise ValueError('no eigenvector corresponding to eigenvalue 1')
+        msg = 'no eigenvector corresponding to eigenvalue 1'
+        raise ValueError(msg)
     origin = numpy.real(V[:, i[-1]]).squeeze()
     origin /= origin[3]
     return factor, origin, direction
 
 
 def projection_matrix(
-    point, normal, direction=None, perspective=None, pseudo=False
+    point,
+    normal,
+    direction=None,
+    perspective=None,
+    pseudo=False,  # noqa: FBT002
 ):
     """Return matrix to project onto plane defined by point and normal.
 
@@ -646,7 +643,7 @@ def projection_matrix(
     return M
 
 
-def projection_from_matrix(matrix, pseudo=False):
+def projection_from_matrix(matrix, *, pseudo=False):
     """Return projection plane and perspective point from projection matrix.
 
     Return values are same as arguments for projection_matrix function:
@@ -690,7 +687,8 @@ def projection_from_matrix(matrix, pseudo=False):
         w, V = numpy.linalg.eig(M33)
         i = numpy.where(abs(numpy.real(w)) < 1e-8)[0]
         if len(i) == 0:
-            raise ValueError('no eigenvector corresponding to eigenvalue 0')
+            msg = 'no eigenvector corresponding to eigenvalue 0'
+            raise ValueError(msg)
         direction = numpy.real(V[:, i[0]]).squeeze()
         direction /= vector_norm(direction)
         # normal: unit eigenvector of M33.T corresponding to eigenvalue 0
@@ -707,7 +705,8 @@ def projection_from_matrix(matrix, pseudo=False):
     # perspective projection
     i = numpy.where(abs(numpy.real(w)) > 1e-8)[0]
     if len(i) == 0:
-        raise ValueError('no eigenvector not corresponding to eigenvalue 0')
+        msg = 'no eigenvector not corresponding to eigenvalue 0'
+        raise ValueError(msg)
     point = numpy.real(V[:, i[-1]]).squeeze()
     point /= point[3]
     normal = -M[3, :3]
@@ -717,7 +716,7 @@ def projection_from_matrix(matrix, pseudo=False):
     return point, normal, None, perspective, pseudo
 
 
-def clip_matrix(left, right, bottom, top, near, far, perspective=False):
+def clip_matrix(left, right, bottom, top, near, far, *, perspective=False):
     """Return matrix to obtain normalized device coordinates from frustum.
 
     The frustum bounds are axis-aligned along x (left, right),
@@ -752,10 +751,12 @@ def clip_matrix(left, right, bottom, top, near, far, perspective=False):
 
     """
     if left >= right or bottom >= top or near >= far:
-        raise ValueError('invalid frustum')
+        msg = 'invalid frustum'
+        raise ValueError(msg)
     if perspective:
         if near <= _EPS:
-            raise ValueError('invalid frustum: near <= 0')
+            msg = 'invalid frustum: near <= 0'
+            raise ValueError(msg)
         t = 2.0 * near
         M = [
             [t / (left - right), 0.0, (right + left) / (right - left), 0.0],
@@ -796,7 +797,8 @@ def shear_matrix(angle, direction, point, normal):
     normal = unit_vector(normal[:3])
     direction = unit_vector(direction[:3])
     if abs(numpy.dot(normal, direction)) > 1e-6:
-        raise ValueError('direction and normal vectors are not orthogonal')
+        msg = 'direction and normal vectors are not orthogonal'
+        raise ValueError(msg)
     angle = math.tan(angle)
     M = numpy.identity(4)
     M[:3, :3] += angle * numpy.outer(direction, normal)
@@ -824,7 +826,8 @@ def shear_from_matrix(matrix):
     w, V = numpy.linalg.eig(M33)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-4)[0]
     if len(i) < 2:
-        raise ValueError(f'no two linear independent eigenvectors found {w}')
+        msg = f'no two linear independent eigenvectors found {w}'
+        raise ValueError(msg)
     V = numpy.real(V[:, i]).squeeze().T
     lenorm = -1.0
     for i0, i1 in ((0, 1), (0, 2), (1, 2)):
@@ -843,7 +846,8 @@ def shear_from_matrix(matrix):
     w, V = numpy.linalg.eig(M)
     i = numpy.where(abs(numpy.real(w) - 1.0) < 1e-8)[0]
     if len(i) == 0:
-        raise ValueError('no eigenvector corresponding to eigenvalue 1')
+        msg = 'no eigenvector corresponding to eigenvalue 1'
+        raise ValueError(msg)
     point = numpy.real(V[:, i[-1]]).squeeze()
     point /= point[3]
     return angle, direction, point, normal
@@ -882,12 +886,14 @@ def decompose_matrix(matrix):
     """
     M = numpy.array(matrix, dtype=numpy.float64, copy=True).T
     if abs(M[3, 3]) < _EPS:
-        raise ValueError('M[3, 3] is zero')
+        msg = 'M[3, 3] is zero'
+        raise ValueError(msg)
     M /= M[3, 3]
     P = M.copy()
     P[:, 3] = 0.0, 0.0, 0.0, 1.0
     if not numpy.linalg.det(P):
-        raise ValueError('matrix is singular')
+        msg = 'matrix is singular'
+        raise ValueError(msg)
 
     scale = numpy.zeros((3,))
     shear = [0.0, 0.0, 0.0]
@@ -1018,7 +1024,7 @@ def orthogonalization_matrix(lengths, angles):
     )
 
 
-def affine_matrix_from_points(v0, v1, shear=True, scale=True, usesvd=True):
+def affine_matrix_from_points(v0, v1, *, shear=True, scale=True, usesvd=True):
     """Return affine transform matrix to register two point sets.
 
     v0 and v1 are shape (ndims, -1) arrays of at least ndims non-homogeneous
@@ -1064,7 +1070,8 @@ def affine_matrix_from_points(v0, v1, shear=True, scale=True, usesvd=True):
 
     ndims = v0.shape[0]
     if ndims < 2 or v0.shape[1] < ndims or v0.shape != v1.shape:
-        raise ValueError('input arrays are of wrong shape or type')
+        msg = 'input arrays are of wrong shape or type'
+        raise ValueError(msg)
 
     # move centroids to origin
     t0 = -numpy.mean(v0, axis=1)
@@ -1129,7 +1136,7 @@ def affine_matrix_from_points(v0, v1, shear=True, scale=True, usesvd=True):
     return M
 
 
-def superimposition_matrix(v0, v1, scale=False, usesvd=True):
+def superimposition_matrix(v0, v1, *, scale=False, usesvd=True):
     """Return matrix to transform given 3D point set into second point set.
 
     v0 and v1 are shape (3, -1) or (4, -1) arrays of at least 3 points.
@@ -1182,7 +1189,8 @@ def superimposition_matrix(v0, v1, scale=False, usesvd=True):
         or v0.shape[0] not in (3, 4)
         or v0.shape[1] < 3
     ):
-        raise ValueError('invalid input shapes')
+        msg = 'invalid input shapes'
+        raise ValueError(msg)
     return affine_matrix_from_points(
         v0[:3], v1[:3], shear=False, scale=scale, usesvd=usesvd
     )
@@ -1442,20 +1450,20 @@ def quaternion_matrix(quaternion):
     )
 
 
-def quaternion_from_matrix(matrix, isprecise=False):
+def quaternion_from_matrix(matrix, *, isprecise=False):
     """Return quaternion from rotation matrix.
 
     If isprecise is True, the input matrix is assumed to be a precise rotation
     matrix and a faster algorithm is used.
 
-    >>> q = quaternion_from_matrix(numpy.identity(4), True)
+    >>> q = quaternion_from_matrix(numpy.identity(4), isprecise=True)
     >>> numpy.allclose(q, [1, 0, 0, 0])
     True
     >>> q = quaternion_from_matrix(numpy.diag([1, -1, -1, 1]))
     >>> numpy.allclose(q, [0, 1, 0, 0]) or numpy.allclose(q, [0, -1, 0, 0])
     True
     >>> R = rotation_matrix(0.123, (1, 2, 3))
-    >>> q = quaternion_from_matrix(R, True)
+    >>> q = quaternion_from_matrix(R, isprecise=True)
     >>> numpy.allclose(q, [0.9981095, 0.0164262, 0.0328524, 0.0492786])
     True
     >>> R = [
@@ -1612,7 +1620,7 @@ def quaternion_imag(quaternion):
     return numpy.array(quaternion[1:4], dtype=numpy.float64, copy=True)
 
 
-def quaternion_slerp(quat0, quat1, fraction, spin=0, shortestpath=True):
+def quaternion_slerp(quat0, quat1, fraction, spin=0, *, shortestpath=True):
     """Return spherical linear interpolation between two quaternions.
 
     >>> q0 = random_quaternion()
@@ -1671,7 +1679,7 @@ def random_quaternion(rand=None):
 
     """
     if rand is None:
-        rand = numpy.random.rand(3)
+        rand = RNG.random(3)
     else:
         assert len(rand) == 3
     r1 = numpy.sqrt(1.0 - rand[0])
@@ -1750,7 +1758,8 @@ class Arcball:
                 initial /= vector_norm(initial)
                 self._qdown = initial
             else:
-                raise ValueError("initial not a quaternion or matrix")
+                msg = 'initial not a quaternion or matrix'
+                raise ValueError(msg)
         self._qnow = self._qpre = self._qdown
 
     def place(self, center, radius):
@@ -1894,7 +1903,7 @@ _AXES2TUPLE = {
 _TUPLE2AXES = {v: k for k, v in _AXES2TUPLE.items()}
 
 
-def vector_norm(data, axis=None, out=None):
+def vector_norm(data, axis=None, *, out=None):
     """Return length, i.e. Euclidean norm, of ndarray along axis.
 
     >>> v = numpy.random.random(3)
@@ -1933,7 +1942,7 @@ def vector_norm(data, axis=None, out=None):
     return None
 
 
-def unit_vector(data, axis=None, out=None):
+def unit_vector(data, axis=None, *, out=None):
     """Return ndarray normalized by length, i.e. Euclidean norm, along axis.
 
     >>> v0 = numpy.random.random(3)
@@ -1990,7 +1999,7 @@ def random_vector(size):
     False
 
     """
-    return numpy.random.random(size)
+    return RNG.random(size)
 
 
 def vector_product(v0, v1, axis=0):
@@ -2014,7 +2023,7 @@ def vector_product(v0, v1, axis=0):
     return numpy.cross(v0, v1, axis=axis)
 
 
-def angle_between_vectors(v0, v1, directed=True, axis=0):
+def angle_between_vectors(v0, v1, *, directed=True, axis=0):
     """Return angle between vectors.
 
     If directed is False, the input vectors are interpreted as undirected axes,
@@ -2103,7 +2112,9 @@ def is_same_quaternion(q0, q1):
     return numpy.allclose(q0, q1) or numpy.allclose(q0, -q1)
 
 
-def _import_module(name, package=None, warn=True, postfix='_py', ignore='_'):
+def _import_module(
+    name, package=None, *, warn=True, postfix='_py', ignore='_'
+):
     """Try import all public attributes from module into global namespace.
 
     Existing attributes with name clashes are renamed with prefix.
@@ -2115,6 +2126,8 @@ def _import_module(name, package=None, warn=True, postfix='_py', ignore='_'):
     import warnings
     from importlib import import_module
 
+    global __all__  # noqa: PLW0603
+
     try:
         if not package:
             module = import_module(name)
@@ -2122,7 +2135,7 @@ def _import_module(name, package=None, warn=True, postfix='_py', ignore='_'):
             module = import_module('.' + name, package=package)
     except ImportError as exc:
         if warn:
-            warnings.warn(str(exc))
+            warnings.warn(str(exc), stacklevel=2)
     else:
         for attr in dir(module):
             if ignore and attr.startswith(ignore):
@@ -2130,22 +2143,16 @@ def _import_module(name, package=None, warn=True, postfix='_py', ignore='_'):
             if postfix:
                 if attr in globals():
                     globals()[attr + postfix] = globals()[attr]
-                    __all__.append(attr + postfix)
+                    __all__ += [attr + postfix]
                 elif warn:
-                    warnings.warn('no Python implementation of ' + attr)
+                    warnings.warn(
+                        'no Python implementation of ' + attr, stacklevel=2
+                    )
             globals()[attr] = getattr(module, attr)
         return True
     return None
 
 
 _import_module('_transformations', __package__)
-
-
-if __name__ == '__main__':
-    import doctest
-    import random  # noqa: used in doctests
-
-    numpy.set_printoptions(suppress=True, precision=5)
-    doctest.testmod(optionflags=doctest.ELLIPSIS)
 
 # mypy: allow-untyped-defs, allow-untyped-calls
