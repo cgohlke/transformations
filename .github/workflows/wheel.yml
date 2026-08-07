@@ -9,21 +9,60 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
+          - os: macos-latest
+          - os: windows-latest
+            windows_archs: AMD64 x86
+          - os: windows-11-arm
+            windows_archs: ARM64
     steps:
-      - uses: actions/checkout@v6
-      - uses: pypa/cibuildwheel@v3.3.1
+      - uses: actions/checkout@v7
+      - uses: pypa/cibuildwheel@v4.2.0
         env:
-          # CIBW_ENVIRONMENT: "PIP_PRE=1"
+          # build ABI3 wheels with Python 3.12, and free-threaded wheels for Python >=3.14t
+          CG_LIMITED_API: 1
+          CIBW_BUILD: "cp312-* cp314t-* cp315t-*"
+          CIBW_SKIP: "*musllinux* *i686 *ppc64le *s390x"
           CIBW_BUILD_VERBOSITY: 2
-          CIBW_SKIP: "cp38* cp39* cp310* *musllinux* *i686 *ppc64le *s390x"
-          # CIBW_ARCHS_LINUX: auto aarch64
           CIBW_ARCHS_LINUX: auto
+          CIBW_ARCHS_WINDOWS: ${{ matrix.windows_archs || 'native' }}
           CIBW_ARCHS_MACOS: x86_64 arm64
-          CIBW_ARCHS_WINDOWS: AMD64 ARM64 x86
           CIBW_TEST_REQUIRES: numpy pytest
           CIBW_TEST_COMMAND: python -m pytest --doctest-modules --pyargs transformations
-      - uses: actions/upload-artifact@v6
+          # CIBW_TEST_SKIP: "*"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: 3.14
+      - name: Install packages
+        run: |
+          python -m pip install -U --find-links=wheelhouse transformations abi3audit
+      - name: Audit ABI3 wheels
+        run: |
+          abi3audit --strict --report wheelhouse/*abi3*.whl
+      - name: Test ABI3 wheels
+        run: |
+          cd ..
+          python -c "import transformations;from transformations import _transformations;print(transformations.__version__)"
+      - uses: actions/upload-artifact@v7
         with:
           path: ./wheelhouse/*.whl
           name: wheels-${{ matrix.os }}
+
+  build_pyodide:
+    name: Build Pyodide wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install cibuildwheel
+        run: python -m pip install cibuildwheel
+      - name: Build wheel
+        run: python -m cibuildwheel --platform pyodide
+      - uses: actions/upload-artifact@v7
+        with:
+          path: ./wheelhouse/*.whl
+          name: wheels-pyodide
