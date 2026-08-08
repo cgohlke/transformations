@@ -2,13 +2,25 @@
 
 """Transformations package Setuptools script."""
 
+import os
 import re
 import sys
+import sysconfig
 
 import numpy
 from setuptools import Extension, setup
 
-buildnumber = ''
+LIMITED_API = os.environ.get('CG_LIMITED_API', '1').lower() in {'1', 'true'}
+GIL_DISABLED = bool(sysconfig.get_config_var('Py_GIL_DISABLED'))
+
+if LIMITED_API and not GIL_DISABLED:
+    py_limited_api = True
+    define_macros = [('Py_LIMITED_API', 0x030C0000)]
+    setup_options = {'bdist_wheel': {'py_limited_api': 'cp312'}}
+else:
+    py_limited_api = False
+    define_macros = []
+    setup_options = {}
 
 
 def search(pattern: str, string: str, flags: int = 0) -> str:
@@ -42,7 +54,6 @@ with open('transformations/transformations.py', encoding='utf-8') as fh:
     code = fh.read()
 
 version = search(r"__version__ = '(.*?)'", code).replace('.x.x', '.dev0')
-version += ('.' + buildnumber) if buildnumber else ''
 
 description = search(r'"""(.*)\.(?:\r\n|\r|\n)', code)
 
@@ -99,20 +110,22 @@ setup(
     project_urls={
         'Bug Tracker': 'https://github.com/cgohlke/transformations/issues',
         'Source Code': 'https://github.com/cgohlke/transformations',
-        # 'Documentation': 'https://',
+        # 'Documentation': 'https://www.cgohlke.com/docs/transformations/',
     },
-    python_requires='>=3.11',
-    install_requires=['numpy'],
+    python_requires='>=3.12',
+    install_requires=['numpy>=2.1'],
     packages=['transformations'],
-    # package_data={'akima': ['py.typed']},
     ext_modules=[
         Extension(
             'transformations._transformations',
             ['transformations/transformations.c'],
             include_dirs=[numpy.get_include()],
+            libraries=(['bcrypt'] if sys.platform == 'win32' else []),
+            define_macros=define_macros,
+            py_limited_api=py_limited_api,
         )
     ],
-    zip_safe=False,
+    options=setup_options,
     platforms=['any'],
     classifiers=[
         'Development Status :: 4 - Beta',
@@ -121,9 +134,9 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: C',
         'Programming Language :: Python :: 3 :: Only',
-        'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
         'Programming Language :: Python :: 3.13',
         'Programming Language :: Python :: 3.14',
+        'Programming Language :: Python :: 3.15',
     ],
 )
