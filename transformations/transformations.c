@@ -30,7 +30,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#define _DOC_ "Homogeneous Transformation Matrices and Quaternions.\n\
+#define _DOC_ \
+"Homogeneous Transformation Matrices and Quaternions.\n\
 \n\
 Transformations.c is a Python C extension module that provides faster\n\
 implementations for the transformations package.\n\
@@ -39,24 +40,25 @@ Refer to the transformations.py module for documentation and tests.\n\
 \n\
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_\n\
 :License: BSD-3-Clause\n\
-:Version: 2026.1.18\n\
+:Version: 2026.8.8\n\
 "
 
-#define _VERSION_ "2026.1.18"
+#define _VERSION_ "2026.8.8"
 
+#define PY_SSIZE_T_CLEAN
 #define WIN32_LEAN_AND_MEAN
-#define NPY_NO_DEPRECATED_API NPY_2_0_API_VERSION
+#define NPY_NO_DEPRECATED_API NPY_2_1_API_VERSION
 
 #include "Python.h"
 
 #ifdef _WIN32
 #include <windows.h>
-#include <wincrypt.h>
+#include <bcrypt.h>
+#pragma comment(lib, "bcrypt")
 #endif
-
-#include "structmember.h"
 #include "math.h"
 #include "float.h"
+#include "stdio.h"
 #include "string.h"
 #include "numpy/arrayobject.h"
 
@@ -81,37 +83,45 @@ Refer to the transformations.py module for documentation and tests.\n\
 
 /*
 Return random doubles in half-open interval [0.0, 1.0).
-Uses /dev/urandom or CryptoAPI. Not very fast but random.
-Assumes sizeof(double) == 2*sizeof(int).
+Uses /dev/urandom or BCryptGenRandom. Not very fast but random.
+Assumes sizeof(double) == 2*sizeof(unsigned int).
 */
 int random_doubles(
     double *buffer,
     Py_ssize_t size)
 {
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+    _Static_assert(
+        sizeof(double) == 2 * sizeof(unsigned int),
+        "random_doubles requires sizeof(double) == 2*sizeof(unsigned int)"
+    );
+#endif
 #ifndef _WIN32
-    int done;
     FILE *rfile;
     if (size < 1)
         return 0;
     rfile = fopen("/dev/urandom", "rb");
     if (rfile == NULL)
         return -1;
-    done = fread(buffer, size*sizeof(double), 1, rfile);
+    if (fread(buffer, size * sizeof(double), 1, rfile) != 1) {
+        fclose(rfile);
+        return -1;
+    }
     fclose(rfile);
 #else
-#pragma comment(lib,"advapi32")
-    BOOL done;
-    HCRYPTPROV hcryptprov;
+    NTSTATUS status;
     if (size < 1)
         return 0;
-    if (!CryptAcquireContext(&hcryptprov, NULL, NULL, PROV_RSA_FULL,
-                             CRYPT_VERIFYCONTEXT) || !hcryptprov)
+    status = BCryptGenRandom(
+        NULL,
+        (PUCHAR)buffer,
+        (ULONG)(size * sizeof(double)),
+        BCRYPT_USE_SYSTEM_PREFERRED_RNG
+    );
+    if (!BCRYPT_SUCCESS(status))
         return -1;
-    done = CryptGenRandom(hcryptprov, (DWORD)(size*sizeof(double)),
-                          (unsigned char *)buffer);
-    CryptReleaseContext(hcryptprov, 0);
 #endif
-    if (done) {
+    {
         unsigned int a, b;
         unsigned int *p = (unsigned int *)buffer;
         while (size--) {
@@ -121,7 +131,6 @@ int random_doubles(
         }
         return 0;
     }
-    return -1;
 }
 
 /*
@@ -138,50 +147,50 @@ int tridiagonalize_symmetric_44(
     double *M = matrix;
 
     u = &M[1];
-    t = u[1]*u[1] + u[2]*u[2];
-    n = sqrt(u[0]*u[0] + t);
+    t = u[1] * u[1] + u[2] * u[2];
+    n = sqrt(u[0] * u[0] + t);
     if (n > EPSILON) {
         if (u[0] < 0.0)
             n = -n;
         u[0] += n;
-        h = (u[0]*u[0] + t) / 2.0;
-        v0 = M[5]*u[0] + M[6]*u[1]  + M[7]*u[2];
-        v1 = M[6]*u[0] + M[10]*u[1] + M[11]*u[2];
-        v2 = M[7]*u[0] + M[11]*u[1] + M[15]*u[2];
+        h = (u[0] * u[0] + t) / 2.0;
+        v0 = M[5] * u[0] + M[6] * u[1]  + M[7] * u[2];
+        v1 = M[6] * u[0] + M[10] * u[1] + M[11] * u[2];
+        v2 = M[7] * u[0] + M[11] * u[1] + M[15] * u[2];
         v0 /= h;
         v1 /= h;
         v2 /= h;
-        g = (u[0]*v0 + u[1]*v1 + u[2]*v2) / (2.0 * h);
+        g = (u[0] * v0 + u[1] * v1 + u[2] * v2) / (2.0 * h);
         v0 -= g * u[0];
         v1 -= g * u[1];
         v2 -= g * u[2];
-        M[5] -=  2.0*v0*u[0];
-        M[10] -= 2.0*v1*u[1];
-        M[15] -= 2.0*v2*u[2];
-        M[6]  -= v1*u[0] + v0*u[1];
-        M[7]  -= v2*u[0] + v0*u[2];
-        M[11] -= v2*u[1] + v1*u[2];
+        M[5] -=  2.0 * v0 * u[0];
+        M[10] -= 2.0 * v1 * u[1];
+        M[15] -= 2.0 * v2 * u[2];
+        M[6]  -= v1 * u[0] + v0 * u[1];
+        M[7]  -= v2 * u[0] + v0 * u[2];
+        M[11] -= v2 * u[1] + v1 * u[2];
         M[1] = -n;
     }
 
     u = &M[6];
-    t = u[1]*u[1];
-    n = sqrt(u[0]*u[0] + t);
+    t = u[1] * u[1];
+    n = sqrt(u[0] * u[0] + t);
     if (n > EPSILON) {
         if (u[0] < 0.0)
             n = -n;
         u[0] += n;
-        h = (u[0]*u[0] + t) / 2.0;
-        v0 = M[10]*u[0] + M[11]*u[1];
-        v1 = M[11]*u[0] + M[15]*u[1];
+        h = (u[0] * u[0] + t) / 2.0;
+        v0 = M[10] * u[0] + M[11] * u[1];
+        v1 = M[11] * u[0] + M[15] * u[1];
         v0 /= h;
         v1 /= h;
-        g = (u[0]*v0 + u[1]*v1) / (2.0 * h);
+        g = (u[0] * v0 + u[1] * v1) / (2.0 * h);
         v0 -= g * u[0];
         v1 -= g * u[1];
-        M[10] -= 2.0*v0*u[0];
-        M[15] -= 2.0*v1*u[1];
-        M[11] -= v1*u[0] + v0*u[1];
+        M[10] -= 2.0 * v0 * u[0];
+        M[15] -= 2.0 * v1 * u[1];
+        M[11] -= v1 * u[0] + v0 * u[1];
         M[6] = -n;
     }
 
@@ -246,17 +255,17 @@ double max_eigenvalue_of_tridiag_44(
         count = (d < 0.0) ? 1 : 0;
         if (fabs(d) < eps)
             d = eps;
-        d = a[1] - eigenv - b[0]*b[0] / d;
+        d = a[1] - eigenv - b[0] * b[0] / d;
         if (d < 0.0)
             count++;
         if (fabs(d) < eps)
             d = eps;
-        d = a[2] - eigenv - b[1]*b[1] / d;
+        d = a[2] - eigenv - b[1] * b[1] / d;
         if (d < 0.0)
             count++;
         if (fabs(d) < eps)
             d = eps;
-        d = a[3] - eigenv - b[2]*b[2] / d;
+        d = a[3] - eigenv - b[2] * b[2] / d;
         if (d < 0.0)
             count++;
 
@@ -283,7 +292,7 @@ int eigenvector_of_symmetric_44(
     double *t = buffer;
 
     /* eps: minimum length of eigenvector to use */
-    eps = (M[0]*M[5]*M[10]*M[15] - M[1]*M[1]*M[11]*M[11]) * 1e-6;
+    eps = (M[0] * M[5] * M[10] * M[15] - M[1] * M[1] * M[11] * M[11]) * 1e-6;
     eps *= eps;
     if (eps < EPSILON)
         eps = EPSILON;
@@ -301,26 +310,26 @@ int eigenvector_of_symmetric_44(
     t[10] = M[2] * M[7];
     t[11] = M[6] * M[3];
 
-    v[0] =  t[1]*M[1] + t[6]*M[6] + t[9]*M[7];
-    v[0] -= t[0]*M[1] + t[7]*M[6] + t[8]*M[7];
-    v[1] =  t[2]*M[1] + t[7]*M[5] + t[10]*M[7];
-    v[1] -= t[3]*M[1] + t[6]*M[5] + t[11]*M[7];
-    v[2] =  t[5]*M[1] + t[8]*M[5] + t[11]*M[6];
-    v[2] -= t[4]*M[1] + t[9]*M[5] + t[10]*M[6];
-    v[3] =  t[0]*M[5] + t[3]*M[6] + t[4]*M[7];
-    v[3] -= t[1]*M[5] + t[2]*M[6] + t[5]*M[7];
-    n = v[0]*v[0] + v[1]*v[1] + v[2]*v[2] + v[3]*v[3];
+    v[0] =  t[1] * M[1] + t[6] * M[6] + t[9] * M[7];
+    v[0] -= t[0] * M[1] + t[7] * M[6] + t[8] * M[7];
+    v[1] =  t[2] * M[1] + t[7] * M[5] + t[10] * M[7];
+    v[1] -= t[3] * M[1] + t[6] * M[5] + t[11] * M[7];
+    v[2] =  t[5] * M[1] + t[8] * M[5] + t[11] * M[6];
+    v[2] -= t[4] * M[1] + t[9] * M[5] + t[10] * M[6];
+    v[3] =  t[0] * M[5] + t[3] * M[6] + t[4] * M[7];
+    v[3] -= t[1] * M[5] + t[2] * M[6] + t[5] * M[7];
+    n = v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3];
 
     if (n < eps) {
-        v[0] =  t[0]*M[0] + t[7]*M[2] + t[8]*M[3];
-        v[0] -= t[1]*M[0] + t[6]*M[2] + t[9]*M[3];
-        v[1] =  t[3]*M[0] + t[6]*M[1] + t[11]*M[3];
-        v[1] -= t[2]*M[0] + t[7]*M[1] + t[10]*M[3];
-        v[2] =  t[4]*M[0] + t[9]*M[1] + t[10]*M[2];
-        v[2] -= t[5]*M[0] + t[8]*M[1] + t[11]*M[2];
-        v[3] =  t[1]*M[1] + t[2]*M[2] + t[5]*M[3];
-        v[3] -= t[0]*M[1] + t[3]*M[2] + t[4]*M[3];
-        n = v[0]*v[0] + v[1]*v[1] + v[2]*v[2] + v[3]*v[3];
+        v[0] =  t[0] * M[0] + t[7] * M[2] + t[8] * M[3];
+        v[0] -= t[1] * M[0] + t[6] * M[2] + t[9] * M[3];
+        v[1] =  t[3] * M[0] + t[6] * M[1] + t[11] * M[3];
+        v[1] -= t[2] * M[0] + t[7] * M[1] + t[10] * M[3];
+        v[2] =  t[4] * M[0] + t[9] * M[1] + t[10] * M[2];
+        v[2] -= t[5] * M[0] + t[8] * M[1] + t[11] * M[2];
+        v[3] =  t[1] * M[1] + t[2] * M[2] + t[5] * M[3];
+        v[3] -= t[0] * M[1] + t[3] * M[2] + t[4] * M[3];
+        n = v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3];
     }
 
     if (n < eps) {
@@ -337,27 +346,27 @@ int eigenvector_of_symmetric_44(
         t[10] = M[0] * M[5];
         t[11] = M[1] * M[1];
 
-        v[0] =  t[1]*M[3] + t[6]*M[11] + t[9]*M[15];
-        v[0] -= t[0]*M[3] + t[7]*M[11] + t[8]*M[15];
-        v[1] =  t[2]*M[3] + t[7]*M[7] + t[10]*M[15];
-        v[1] -= t[3]*M[3] + t[6]*M[7] + t[11]*M[15];
-        v[2] =  t[5]*M[3] + t[8]*M[7] + t[11]*M[11];
-        v[2] -= t[4]*M[3] + t[9]*M[7] + t[10]*M[11];
-        v[3] =  t[0]*M[7] + t[3]*M[11] + t[4]*M[15];
-        v[3] -= t[1]*M[7] + t[2]*M[11] + t[5]*M[15];
-        n = v[0]*v[0] + v[1]*v[1] + v[2]*v[2] + v[3]*v[3];
+        v[0] =  t[1] * M[3] + t[6] * M[11] + t[9] * M[15];
+        v[0] -= t[0] * M[3] + t[7] * M[11] + t[8] * M[15];
+        v[1] =  t[2] * M[3] + t[7] * M[7] + t[10] * M[15];
+        v[1] -= t[3] * M[3] + t[6] * M[7] + t[11] * M[15];
+        v[2] =  t[5] * M[3] + t[8] * M[7] + t[11] * M[11];
+        v[2] -= t[4] * M[3] + t[9] * M[7] + t[10] * M[11];
+        v[3] =  t[0] * M[7] + t[3] * M[11] + t[4] * M[15];
+        v[3] -= t[1] * M[7] + t[2] * M[11] + t[5] * M[15];
+        n = v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3];
     }
 
     if (n < eps) {
-        v[0] =  t[8]*M[11] + t[0]*M[2] + t[7]*M[10];
-        v[0] -= t[6]*M[10] + t[9]*M[11] + t[1]*M[2];
-        v[1] =  t[6]*M[6] + t[11]*M[11] + t[3]*M[2];
-        v[1] -= t[10]*M[11] + t[2]*M[2] + t[7]*M[6];
-        v[2] =  t[10]*M[10] + t[4]*M[2] + t[9]*M[6];
-        v[2] -= t[8]*M[6] + t[11]*M[10] + t[5]*M[2];
-        v[3] =  t[2]*M[10] + t[5]*M[11] + t[1]*M[6];
-        v[3] -= t[4]*M[11] + t[0]*M[6] + t[3]*M[10];
-        n = v[0]*v[0] + v[1]*v[1] + v[2]*v[2] + v[3]*v[3];
+        v[0] =  t[8] * M[11] + t[0] * M[2] + t[7] * M[10];
+        v[0] -= t[6] * M[10] + t[9] * M[11] + t[1] * M[2];
+        v[1] =  t[6] * M[6] + t[11] * M[11] + t[3] * M[2];
+        v[1] -= t[10] * M[11] + t[2] * M[2] + t[7] * M[6];
+        v[2] =  t[10] * M[10] + t[4] * M[2] + t[9] * M[6];
+        v[2] -= t[8] * M[6] + t[11] * M[10] + t[5] * M[2];
+        v[3] =  t[2] * M[10] + t[5] * M[11] + t[1] * M[6];
+        v[3] -= t[4] * M[11] + t[0] * M[6] + t[3] * M[10];
+        n = v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3];
     }
 
     if (n < eps)
@@ -379,7 +388,7 @@ int invert_matrix22(
     double *matrix, /* double[4] */
     double *result) /* double[4] */
 {
-    double det = matrix[0]*matrix[3] - matrix[1]*matrix[2];
+    double det = matrix[0] * matrix[3] - matrix[1] * matrix[2];
 
     if (ISZERO(det))
         return -1;
@@ -403,17 +412,17 @@ int invert_matrix33(
     double det;
     double *M = matrix;
 
-    result[0] = M[8]*M[4] - M[7]*M[5];
-    result[1] = M[7]*M[2] - M[8]*M[1];
-    result[2] = M[5]*M[1] - M[4]*M[2];
-    result[3] = M[6]*M[5] - M[8]*M[3];
-    result[4] = M[8]*M[0] - M[6]*M[2];
-    result[5] = M[3]*M[2] - M[5]*M[0];
-    result[6] = M[7]*M[3] - M[6]*M[4];
-    result[7] = M[6]*M[1] - M[7]*M[0];
-    result[8] = M[4]*M[0] - M[3]*M[1];
+    result[0] = M[8] * M[4] - M[7] * M[5];
+    result[1] = M[7] * M[2] - M[8] * M[1];
+    result[2] = M[5] * M[1] - M[4] * M[2];
+    result[3] = M[6] * M[5] - M[8] * M[3];
+    result[4] = M[8] * M[0] - M[6] * M[2];
+    result[5] = M[3] * M[2] - M[5] * M[0];
+    result[6] = M[7] * M[3] - M[6] * M[4];
+    result[7] = M[6] * M[1] - M[7] * M[0];
+    result[8] = M[4] * M[0] - M[3] * M[1];
 
-    det = M[0]*result[0] + M[3]*result[1] + M[6]*result[2];
+    det = M[0] * result[0] + M[3] * result[1] + M[6] * result[2];
 
     if (ISZERO(det))
         return -1;
@@ -450,54 +459,55 @@ int invert_matrix44(
     t[10] = M[2] * M[7];
     t[11] = M[6] * M[3];
 
-    result[0] = t[0]*M[5] + t[3]*M[9] + t[4]*M[13];
-    result[0] -= t[1]*M[5] + t[2]*M[9] + t[5]*M[13];
-    result[1] = t[1]*M[1] + t[6]*M[9] + t[9]*M[13];
-    result[1] -= t[0]*M[1] + t[7]*M[9] + t[8]*M[13];
-    result[2] = t[2]*M[1] + t[7]*M[5] + t[10]*M[13];
-    result[2] -= t[3]*M[1] + t[6]*M[5] + t[11]*M[13];
-    result[3] = t[5]*M[1] + t[8]*M[5] + t[11]*M[9];
-    result[3] -= t[4]*M[1] + t[9]*M[5] + t[10]*M[9];
-    result[4] = t[1]*M[4] + t[2]*M[8] + t[5]*M[12];
-    result[4] -= t[0]*M[4] + t[3]*M[8] + t[4]*M[12];
-    result[5] = t[0]*M[0] + t[7]*M[8] + t[8]*M[12];
-    result[5] -= t[1]*M[0] + t[6]*M[8] + t[9]*M[12];
-    result[6] = t[3]*M[0] + t[6]*M[4] + t[11]*M[12];
-    result[6] -= t[2]*M[0] + t[7]*M[4] + t[10]*M[12];
-    result[7] = t[4]*M[0] + t[9]*M[4] + t[10]*M[8];
-    result[7] -= t[5]*M[0] + t[8]*M[4] + t[11]*M[8];
+    result[0] = t[0] * M[5] + t[3] * M[9] + t[4] * M[13];
+    result[0] -= t[1] * M[5] + t[2] * M[9] + t[5] * M[13];
+    result[1] = t[1] * M[1] + t[6] * M[9] + t[9] * M[13];
+    result[1] -= t[0] * M[1] + t[7] * M[9] + t[8] * M[13];
+    result[2] = t[2] * M[1] + t[7] * M[5] + t[10] * M[13];
+    result[2] -= t[3] * M[1] + t[6] * M[5] + t[11] * M[13];
+    result[3] = t[5] * M[1] + t[8] * M[5] + t[11] * M[9];
+    result[3] -= t[4] * M[1] + t[9] * M[5] + t[10] * M[9];
+    result[4] = t[1] * M[4] + t[2] * M[8] + t[5] * M[12];
+    result[4] -= t[0] * M[4] + t[3] * M[8] + t[4] * M[12];
+    result[5] = t[0] * M[0] + t[7] * M[8] + t[8] * M[12];
+    result[5] -= t[1] * M[0] + t[6] * M[8] + t[9] * M[12];
+    result[6] = t[3] * M[0] + t[6] * M[4] + t[11] * M[12];
+    result[6] -= t[2] * M[0] + t[7] * M[4] + t[10] * M[12];
+    result[7] = t[4] * M[0] + t[9] * M[4] + t[10] * M[8];
+    result[7] -= t[5] * M[0] + t[8] * M[4] + t[11] * M[8];
 
-    t[0] = M[8]*M[13];
-    t[1] = M[12]*M[9];
-    t[2] = M[4]*M[13];
-    t[3] = M[12]*M[5];
-    t[4] = M[4]*M[9];
-    t[5] = M[8]*M[5];
-    t[6] = M[0]*M[13];
-    t[7] = M[12]*M[1];
-    t[8] = M[0]*M[9];
-    t[9] = M[8]*M[1];
-    t[10] = M[0]*M[5];
-    t[11] = M[4]*M[1];
+    t[0] = M[8] * M[13];
+    t[1] = M[12] * M[9];
+    t[2] = M[4] * M[13];
+    t[3] = M[12] * M[5];
+    t[4] = M[4] * M[9];
+    t[5] = M[8] * M[5];
+    t[6] = M[0] * M[13];
+    t[7] = M[12] * M[1];
+    t[8] = M[0] * M[9];
+    t[9] = M[8] * M[1];
+    t[10] = M[0] * M[5];
+    t[11] = M[4] * M[1];
 
-    result[8] = t[0]*M[7] + t[3]*M[11] + t[4]*M[15];
-    result[8] -= t[1]*M[7] + t[2]*M[11] + t[5]*M[15];
-    result[9] = t[1]*M[3] + t[6]*M[11] + t[9]*M[15];
-    result[9] -= t[0]*M[3] + t[7]*M[11] + t[8]*M[15];
-    result[10] = t[2]*M[3] + t[7]*M[7] + t[10]*M[15];
-    result[10]-= t[3]*M[3] + t[6]*M[7] + t[11]*M[15];
-    result[11] = t[5]*M[3] + t[8]*M[7] + t[11]*M[11];
-    result[11]-= t[4]*M[3] + t[9]*M[7] + t[10]*M[11];
-    result[12] = t[2]*M[10] + t[5]*M[14] + t[1]*M[6];
-    result[12]-= t[4]*M[14] + t[0]*M[6] + t[3]*M[10];
-    result[13] = t[8]*M[14] + t[0]*M[2] + t[7]*M[10];
-    result[13]-= t[6]*M[10] + t[9]*M[14] + t[1]*M[2];
-    result[14] = t[6]*M[6] + t[11]*M[14] + t[3]*M[2];
-    result[14]-= t[10]*M[14] + t[2]*M[2] + t[7]*M[6];
-    result[15] = t[10]*M[10] + t[4]*M[2] + t[9]*M[6];
-    result[15]-= t[8]*M[6] + t[11]*M[10] + t[5]*M[2];
+    result[8] = t[0] * M[7] + t[3] * M[11] + t[4] * M[15];
+    result[8] -= t[1] * M[7] + t[2] * M[11] + t[5] * M[15];
+    result[9] = t[1] * M[3] + t[6] * M[11] + t[9] * M[15];
+    result[9] -= t[0] * M[3] + t[7] * M[11] + t[8] * M[15];
+    result[10] = t[2] * M[3] + t[7] * M[7] + t[10] * M[15];
+    result[10] -= t[3] * M[3] + t[6] * M[7] + t[11] * M[15];
+    result[11] = t[5] * M[3] + t[8] * M[7] + t[11] * M[11];
+    result[11] -= t[4] * M[3] + t[9] * M[7] + t[10] * M[11];
+    result[12] = t[2] * M[10] + t[5] * M[14] + t[1] * M[6];
+    result[12] -= t[4] * M[14] + t[0] * M[6] + t[3] * M[10];
+    result[13] = t[8] * M[14] + t[0] * M[2] + t[7] * M[10];
+    result[13] -= t[6] * M[10] + t[9] * M[14] + t[1] * M[2];
+    result[14] = t[6] * M[6] + t[11] * M[14] + t[3] * M[2];
+    result[14] -= t[10] * M[14] + t[2] * M[2] + t[7] * M[6];
+    result[15] = t[10] * M[10] + t[4] * M[2] + t[9] * M[6];
+    result[15] -= t[8] * M[6] + t[11] * M[10] + t[5] * M[2];
 
-    det = M[0]*result[0] + M[4]*result[1] + M[8]*result[2] + M[12]*result[3];
+    det = M[0] * result[0] + M[4] * result[1] + M[8] * result[2] + M[12] *
+        result[3];
 
     if (ISZERO(det))
         return -1;
@@ -530,15 +540,15 @@ int invert_matrix(
         seq[k] = k;
 
     /* forward solution */
-    for (k = 0; k < size-1; k++) {
-        ks = k*size;
+    for (k = 0; k < size - 1; k++) {
+        ks = k * size;
         ksk = ks + k;
 
         /* pivoting: find maximum coefficient in column */
         p = k;
         temp = fabs(M[ksk]);
-        for (i = k+1; i < size; i++) {
-            temp1 = fabs(M[i*size + k]);
+        for (i = k + 1; i < size; i++) {
+            temp1 = fabs(M[i * size + k]);
             if (temp < temp1) {
                 temp = temp1;
                 p = i;
@@ -546,7 +556,7 @@ int invert_matrix(
         }
         /* permutate lines with index k and p */
         if (p != k) {
-            ps = p*size;
+            ps = p * size;
             for (i = 0; i < size; i++) {
                 temp = M[ks + i];
                 M[ks + i] = M[ps + i];
@@ -563,13 +573,13 @@ int invert_matrix(
 
         /* elimination */
         temp = M[ksk];
-        for (j = k+1; j < size; j++) {
-            M[j*size + k] /= temp;
+        for (j = k + 1; j < size; j++) {
+            M[j * size + k] /= temp;
         }
-        for (j = k+1; j < size; j++) {
+        for (j = k + 1; j < size; j++) {
             js = j * size;
             temp = M[js + k];
-            for(i = k+1; i < size; i++) {
+            for (i = k + 1; i < size; i++) {
                 M[js + i] -= temp * M[ks + i];
             }
             M[js + k] = temp;
@@ -577,26 +587,26 @@ int invert_matrix(
     }
 
     /* Backward substitution with identity matrix */
-    memset(result, 0, size*size*sizeof(double));
+    memset(result, 0, size * size * sizeof(double));
     for (i = 0; i < size; i++) {
-        result[i*size + seq[i]] = 1.0;
+        result[i * size + seq[i]] = 1.0;
         iseq[seq[i]] = i;
     }
 
     for (i = 0; i < size; i++) {
         is = iseq[i];
         for (k = 1; k < size; k++) {
-            ks = k*size;
+            ks = k * size;
             temp = 0.0;
             for (j = is; j < k; j++)
-                temp += M[ks + j] * result[j*size + i];
+                temp += M[ks + j] * result[j * size + i];
             result[ks + i] -= temp;
         }
-        for (k = size-1; k >= 0; k--) {
-            ks = k*size;
+        for (k = size - 1; k >= 0; k--) {
+            ks = k * size;
             temp = result[ks + i];
-            for (j = k+1; j < size; j++)
-                temp -= M[ks + j] * result[j*size + i];
+            for (j = k + 1; j < size; j++)
+                temp -= M[ks + j] * result[j * size + i];
             result[ks + i] = temp / M[ks + k];
         }
     }
@@ -623,19 +633,22 @@ int quaternion_from_matrix(
         q[3] = (M[4] - M[1]) * s;
         q[2] = (M[2] - M[8]) * s;
         q[1] = (M[9] - M[6]) * s;
-    } else if ((M[0] > M[5]) && (M[0] > M[10])) {
+    }
+    else if ((M[0] > M[5]) && (M[0] > M[10])) {
         s = 0.5 / sqrt(M[0] - (M[5] + M[10]) + M[15]);
         q[1] = 0.25 / s;
         q[2] = (M[4] + M[1]) * s;
         q[3] = (M[2] + M[8]) * s;
         q[0] = (M[9] - M[6]) * s;
-    } else if (M[5] > M[10]) {
+    }
+    else if (M[5] > M[10]) {
         s = 0.5 / sqrt(M[5] - (M[0] + M[10]) + M[15]);
         q[2] = 0.25 / s;
         q[1] = (M[4] + M[1]) * s;
         q[0] = (M[2] - M[8]) * s;
         q[3] = (M[9] + M[6]) * s;
-    } else {
+    }
+    else {
         s = 0.5 / sqrt(M[10] - (M[0] + M[5]) + M[15]);
         q[3] = 0.25 / s;
         q[0] = (M[4] - M[1]) * s;
@@ -665,41 +678,42 @@ int quaternion_matrix(
     double x = quat[1];
     double y = quat[2];
     double z = quat[3];
-    double n = sqrt(w*w + x*x + y*y + z*z);
+    double n = sqrt(w * w + x * x + y * y + z * z);
 
     if (n < EPSILON) {
         /* return identity matrix */
-        memset(M, 0, 16*sizeof(double));
+        memset(M, 0, 16 * sizeof(double));
         M[0] = M[5] = M[10] = M[15] = 1.0;
-    } else {
+    }
+    else {
         w /= n;
         x /= n;
         y /= n;
         z /= n;
         {
-            double x2 = x+x;
-            double y2 = y+y;
-            double z2 = z+z;
+            double x2 = x + x;
+            double y2 = y + y;
+            double z2 = z + z;
             {
-                double xx2 = x*x2;
-                double yy2 = y*y2;
-                double zz2 = z*z2;
+                double xx2 = x * x2;
+                double yy2 = y * y2;
+                double zz2 = z * z2;
                 M[0]  = 1.0 - yy2 - zz2;
                 M[5]  = 1.0 - xx2 - zz2;
                 M[10] = 1.0 - xx2 - yy2;
-            }{
-                double yz2 = y*z2;
-                double wx2 = w*x2;
+            } {
+                double yz2 = y * z2;
+                double wx2 = w * x2;
                 M[6] = yz2 - wx2;
                 M[9] = yz2 + wx2;
-            }{
-                double xy2 = x*y2;
-                double wz2 = w*z2;
+            } {
+                double xy2 = x * y2;
+                double wz2 = w * z2;
                 M[1] = xy2 - wz2;
                 M[4] = xy2 + wz2;
-            }{
-                double xz2 = x*z2;
-                double wy2 = w*y2;
+            } {
+                double xz2 = x * z2;
+                double wy2 = w * y2;
                 M[8] = xz2 - wy2;
                 M[2] = xz2 + wy2;
             }
@@ -718,10 +732,11 @@ int quaternion_from_sphere_points(
     double *point1, /* double[3] */
     double *quat)   /* double[4] */
 {
-    quat[0] = point0[0]*point1[0] + point0[1]*point1[1] + point0[2]*point1[2];
-    quat[1] = point0[1]*point1[2] - point0[2]*point1[1];
-    quat[2] = point0[2]*point1[0] - point0[0]*point1[2];
-    quat[3] = point0[0]*point1[1] - point0[1]*point1[0];
+    quat[0] = point0[0] * point1[0] + point0[1] * point1[1] + point0[2] *
+        point1[2];
+    quat[1] = point0[1] * point1[2] - point0[2] * point1[1];
+    quat[2] = point0[2] * point1[0] - point0[0] * point1[2];
+    quat[3] = point0[0] * point1[1] - point0[1] * point1[0];
     return 0;
 }
 
@@ -733,21 +748,22 @@ int quaternion_to_sphere_points(
     double *point0, /* double[3] */
     double *point1) /* double[3] */
 {
-    double n = sqrt(quat[0]*quat[0] + quat[1]*quat[1]);
+    double n = sqrt(quat[0] * quat[0] + quat[1] * quat[1]);
 
     if (n < EPSILON) {
         point0[0] = 0.0;
         point0[1] = 1.0;
         point0[2] = 0.0;
-    } else {
+    }
+    else {
         point0[0] = -quat[2] / n;
         point0[1] = quat[1] / n;
         point0[2] = 0.0;
     }
 
-    point1[0] = quat[0]*point0[0] - quat[3]*point0[1];
-    point1[1] = quat[0]*point0[1] + quat[3]*point0[0];
-    point1[2] = quat[1]*point0[1] - quat[2]*point0[0];
+    point1[0] = quat[0] * point0[0] - quat[3] * point0[1];
+    point1[1] = quat[0] * point0[1] + quat[3] * point0[0];
+    point1[2] = quat[1] * point0[1] - quat[2] * point0[0];
 
     if (quat[0] < 0.0) {
         point0[0] = -point0[0];
@@ -769,8 +785,8 @@ PyConverter_DoubleArray(
     PyObject **address)
 {
     *address = PyArray_FROM_OTF(object, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
-     if (*address == NULL) return NPY_FAIL;
-     return NPY_SUCCEED;
+    if (*address == NULL) return NPY_FAIL;
+    return NPY_SUCCEED;
 }
 
 static int
@@ -783,7 +799,8 @@ PyConverter_AnyDoubleArray(
         *address = object;
         Py_INCREF(object);
         return NPY_SUCCEED;
-    } else {
+    }
+    else {
         *address = PyArray_FROM_OTF(object, NPY_DOUBLE, NPY_ARRAY_ALIGNED);
         if (*address == NULL) {
             PyErr_Format(PyExc_ValueError, "can not convert to array");
@@ -800,7 +817,8 @@ PyConverter_DoubleArrayOrNone(
 {
     if ((object == NULL) || (object == Py_None)) {
         *address = NULL;
-    } else {
+    }
+    else {
         *address = PyArray_FROM_OTF(object, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
         if (*address == NULL) {
             PyErr_Format(PyExc_ValueError, "can not convert to array");
@@ -822,8 +840,10 @@ PyConverter_DoubleMatrix44(
         return NPY_FAIL;
     }
     obj = (PyArrayObject *) *address;
-    if ((PyArray_NDIM(obj) != 2) || (PyArray_DIM(obj, 0) != 4)
-        || (PyArray_DIM(obj, 1) != 4) || PyArray_ISCOMPLEX(obj)) {
+    if (
+        (PyArray_NDIM(obj) != 2) || (PyArray_DIM(obj, 0) != 4)
+        || (PyArray_DIM(obj, 1) != 4) || PyArray_ISCOMPLEX(obj))
+    {
         PyErr_Format(PyExc_ValueError, "not a 4x4 matrix");
         Py_DECREF(*address);
         *address = NULL;
@@ -838,15 +858,20 @@ PyConverter_DoubleMatrix44Copy(
     PyObject **address)
 {
     PyArrayObject *obj;
-    *address = PyArray_FROM_OTF(object, NPY_DOUBLE,
-                                NPY_ARRAY_ENSURECOPY|NPY_ARRAY_IN_ARRAY);
+    *address = PyArray_FROM_OTF(
+        object,
+        NPY_DOUBLE,
+        NPY_ARRAY_ENSURECOPY | NPY_ARRAY_IN_ARRAY
+    );
     if (*address == NULL) {
         PyErr_Format(PyExc_ValueError, "can not convert to array");
         return NPY_FAIL;
     }
     obj = (PyArrayObject *) *address;
-    if ((PyArray_NDIM(obj) != 2) || (PyArray_DIM(obj, 0) != 4)
-        || (PyArray_DIM(obj, 1) != 4) || PyArray_ISCOMPLEX(obj)) {
+    if (
+        (PyArray_NDIM(obj) != 2) || (PyArray_DIM(obj, 0) != 4)
+        || (PyArray_DIM(obj, 1) != 4) || PyArray_ISCOMPLEX(obj))
+    {
         PyErr_Format(PyExc_ValueError, "not a 4x4 matrix");
         Py_DECREF(*address);
         *address = NULL;
@@ -867,8 +892,10 @@ PyConverter_DoubleVector3(
         return NPY_FAIL;
     }
     obj = (PyArrayObject *) *address;
-    if ((PyArray_NDIM(obj) != 1) || (PyArray_DIM(obj, 0) < 3)
-        || PyArray_ISCOMPLEX(obj)) {
+    if (
+        (PyArray_NDIM(obj) != 1) || (PyArray_DIM(obj, 0) < 3)
+        || PyArray_ISCOMPLEX(obj))
+    {
         PyErr_Format(PyExc_ValueError, "not a vector3");
         Py_DECREF(*address);
         *address = NULL;
@@ -889,8 +916,10 @@ PyConverter_DoubleVector4(
         return NPY_FAIL;
     }
     obj = (PyArrayObject *) *address;
-    if ((PyArray_NDIM(obj) != 1) || (PyArray_DIM(obj, 0) < 4)
-        || PyArray_ISCOMPLEX(obj)) {
+    if (
+        (PyArray_NDIM(obj) != 1) || (PyArray_DIM(obj, 0) < 4)
+        || PyArray_ISCOMPLEX(obj))
+    {
         PyErr_Format(PyExc_ValueError, "not a vector4");
         Py_DECREF(*address);
         *address = NULL;
@@ -905,15 +934,20 @@ PyConverter_DoubleVector4Copy(
     PyObject **address)
 {
     PyArrayObject *obj;
-    *address = PyArray_FROM_OTF(object, NPY_DOUBLE,
-                                NPY_ARRAY_ENSURECOPY|NPY_ARRAY_IN_ARRAY);
+    *address = PyArray_FROM_OTF(
+        object,
+        NPY_DOUBLE,
+        NPY_ARRAY_ENSURECOPY | NPY_ARRAY_IN_ARRAY
+    );
     if (*address == NULL) {
         PyErr_Format(PyExc_ValueError, "can not convert to array");
         return NPY_FAIL;
     }
     obj = (PyArrayObject *) *address;
-    if ((PyArray_NDIM(obj) != 1) || (PyArray_DIM(obj, 0) < 4)
-        || PyArray_ISCOMPLEX(obj)) {
+    if (
+        (PyArray_NDIM(obj) != 1) || (PyArray_DIM(obj, 0) < 4)
+        || PyArray_ISCOMPLEX(obj))
+    {
         PyErr_Format(PyExc_ValueError, "not a vector4");
         Py_DECREF(*address);
         *address = NULL;
@@ -929,7 +963,8 @@ PyConverter_DoubleVector3OrNone(
 {
     if ((object == NULL) || (object == Py_None)) {
         *address = NULL;
-    } else {
+    }
+    else {
         PyArrayObject *obj;
         *address = PyArray_FROM_OTF(object, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
         if (*address == NULL) {
@@ -937,8 +972,10 @@ PyConverter_DoubleVector3OrNone(
             return NPY_FAIL;
         }
         obj = (PyArrayObject *) *address;
-        if ((PyArray_NDIM(obj) != 1) || (PyArray_DIM(obj, 0) < 3)
-            || PyArray_ISCOMPLEX(obj)) {
+        if (
+            (PyArray_NDIM(obj) != 1) || (PyArray_DIM(obj, 0) < 3)
+            || PyArray_ISCOMPLEX(obj))
+        {
             PyErr_Format(PyExc_ValueError, "not a vector3");
             Py_DECREF(*address);
             *address = NULL;
@@ -962,7 +999,8 @@ PyOutputConverter_AnyDoubleArrayOrNone(
         Py_INCREF(object);
         *address = (PyArrayObject *)object;
         return NPY_SUCCEED;
-    } else {
+    }
+    else {
         PyErr_Format(PyExc_TypeError, "output must be array of type double");
         *address = NULL;
         return NPY_FAIL;
@@ -972,7 +1010,9 @@ PyOutputConverter_AnyDoubleArrayOrNone(
 /*
 Return i-th element of Python sequence as long, or -1 on failure.
 */
-long PySequence_GetInteger(PyObject *obj, Py_ssize_t i)
+long py_sequence_get_integer(
+    PyObject *obj,
+    Py_ssize_t i)
 {
     long value;
     PyObject *item = PySequence_GetItem(obj, i);
@@ -990,7 +1030,7 @@ long PySequence_GetInteger(PyObject *obj, Py_ssize_t i)
 /*
 Equivalence of transformations.
 */
-char py_is_same_transform_doc[] =
+static char py_is_same_transform_doc[] =
     "Return True if two matrices perform same transformation.";
 
 static PyObject *
@@ -1002,11 +1042,20 @@ py_is_same_transform(
     int result;
     PyArrayObject *matrix0 = NULL;
     PyArrayObject *matrix1 = NULL;
-    static char *kwlist[] = {"matrix0", "matrix1", NULL};
+    static char *kwlist[] = { "matrix0", "matrix1", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&O&", kwlist,
-        PyConverter_DoubleMatrix44, &matrix0,
-        PyConverter_DoubleMatrix44, &matrix1)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&O&",
+        kwlist,
+        PyConverter_DoubleMatrix44,
+        &matrix0,
+        PyConverter_DoubleMatrix44,
+        &matrix1
+        ))
+        goto _fail;
 
     {
         double *M0 = (double *)PyArray_DATA(matrix0);
@@ -1017,11 +1066,12 @@ py_is_same_transform(
         int i;
         if (ISZERO(t0) || ISZERO(t1)) {
             result = 0;
-        } else {
+        }
+        else {
             result = 1;
             for (i = 0; i < 16; i++) {
                 t = M1[i] / t1;
-                if (fabs(M0[i]/t0 - t) > (1e-8 + 1e-5*fabs(t))) {
+                if (fabs(M0[i] / t0 - t) > (1e-8 + 1e-5 * fabs(t))) {
                     result = 0;
                     break;
                 }
@@ -1036,16 +1086,16 @@ py_is_same_transform(
     else
         Py_RETURN_FALSE;
 
-  _fail:
-    Py_XDECREF(matrix0);
-    Py_XDECREF(matrix1);
+_fail:
+    Py_XDECREF((PyObject *)(matrix0));
+    Py_XDECREF((PyObject *)(matrix1));
     return NULL;
 }
 
 /*
 Identity matrix.
 */
-char py_identity_matrix_doc[] = "Return identity/unit matrix.";
+static char py_identity_matrix_doc[] = "Return identity/unit matrix.";
 
 static PyObject *
 py_identity_matrix(
@@ -1054,7 +1104,7 @@ py_identity_matrix(
 {
     PyArrayObject *result = NULL;
     PyArray_Descr *type = NULL;
-    Py_ssize_t dims[] = {4, 4};
+    Py_ssize_t dims[] = { 4, 4 };
 
     type = PyArray_DescrFromType(NPY_DOUBLE);
     result = (PyArrayObject*)PyArray_Zeros(2, dims, type, 0);
@@ -1069,15 +1119,15 @@ py_identity_matrix(
 
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Translation matrix.
 */
-char py_translation_matrix_doc[] =
+static char py_translation_matrix_doc[] =
     "Return matrix to translate by direction vector.";
 
 static PyObject *
@@ -1089,11 +1139,19 @@ py_translation_matrix(
     PyArrayObject *result = NULL;
     PyArrayObject *direction = NULL;
     PyArray_Descr *type = NULL;
-    Py_ssize_t dims[] = {4, 4};
-    static char *kwlist[] = {"direction", NULL};
+    Py_ssize_t dims[] = { 4, 4 };
+    static char *kwlist[] = { "direction", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&", kwlist,
-        PyConverter_DoubleVector3, &direction)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&",
+        kwlist,
+        PyConverter_DoubleVector3,
+        &direction
+        ))
+        goto _fail;
 
     type = PyArray_DescrFromType(NPY_DOUBLE);
     result = (PyArrayObject*)PyArray_Zeros(2, dims, type, 0);
@@ -1113,16 +1171,16 @@ py_translation_matrix(
     Py_DECREF(direction);
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(direction);
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(direction));
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Reflection matrix.
 */
-char py_reflection_matrix_doc[] =
+static char py_reflection_matrix_doc[] =
     "Return matrix to mirror at plane defined by point and normal vector.";
 
 static PyObject *
@@ -1134,12 +1192,21 @@ py_reflection_matrix(
     PyArrayObject *result = NULL;
     PyArrayObject *point = NULL;
     PyArrayObject *normal = NULL;
-    Py_ssize_t dims[] = {4, 4};
-    static char *kwlist[] = {"point", "normal", NULL};
+    Py_ssize_t dims[] = { 4, 4 };
+    static char *kwlist[] = { "point", "normal", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&O&", kwlist,
-        PyConverter_DoubleVector3, &point,
-        PyConverter_DoubleVector3, &normal)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&O&",
+        kwlist,
+        PyConverter_DoubleVector3,
+        &point,
+        PyConverter_DoubleVector3,
+        &normal
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -1153,7 +1220,7 @@ py_reflection_matrix(
         double nx = n[0];
         double ny = n[1];
         double nz = n[2];
-        double t = sqrt(nx*nx + ny*ny + nz*nz);
+        double t = sqrt(nx * nx + ny * ny + nz * nz);
         if (t < EPSILON) {
             PyErr_Format(PyExc_ValueError, "invalid normal vector");
             goto _fail;
@@ -1163,13 +1230,13 @@ py_reflection_matrix(
         nz /= t;
         M[12] = M[13] = M[14] = 0.0;
         M[15] = 1.0;
-        M[0] = 1.0 - 2.0 * nx *nx;
-        M[5] = 1.0 - 2.0 * ny *ny;
-        M[10] = 1.0 - 2.0 * nz *nz;
-        M[1] = M[4] = -2.0 * nx *ny;
-        M[2] = M[8] = -2.0 * nx *nz;
-        M[6] = M[9] = -2.0 * ny *nz;
-        t = 2.0 * (p[0]*nx + p[1]*ny + p[2]*nz);
+        M[0] = 1.0 - 2.0 * nx * nx;
+        M[5] = 1.0 - 2.0 * ny * ny;
+        M[10] = 1.0 - 2.0 * nz * nz;
+        M[1] = M[4] = -2.0 * nx * ny;
+        M[2] = M[8] = -2.0 * nx * nz;
+        M[6] = M[9] = -2.0 * ny * nz;
+        t = 2.0 * (p[0] * nx + p[1] * ny + p[2] * nz);
         M[3] = nx * t;
         M[7] = ny * t;
         M[11] = nz * t;
@@ -1179,17 +1246,17 @@ py_reflection_matrix(
     Py_DECREF(normal);
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(point);
-    Py_XDECREF(normal);
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(point));
+    Py_XDECREF((PyObject *)(normal));
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Rotation matrix.
 */
-char py_rotation_matrix_doc[] =
+static char py_rotation_matrix_doc[] =
     "Return matrix to rotate about axis defined by point and direction.";
 
 static PyObject *
@@ -1201,14 +1268,23 @@ py_rotation_matrix(
     PyArrayObject *result = NULL;
     PyArrayObject *point = NULL;
     PyArrayObject *direction = NULL;
-    Py_ssize_t dims[] = {4, 4};
+    Py_ssize_t dims[] = { 4, 4 };
     double angle;
-    static char *kwlist[] = {"angle", "direction", "point", NULL};
+    static char *kwlist[] = { "angle", "direction", "point", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "dO&|O&", kwlist,
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "dO&|O&",
+        kwlist,
         &angle,
-        PyConverter_DoubleVector3, &direction,
-        PyConverter_DoubleVector3OrNone, &point)) goto _fail;
+        PyConverter_DoubleVector3,
+        &direction,
+        PyConverter_DoubleVector3OrNone,
+        &point
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -1226,7 +1302,7 @@ py_rotation_matrix(
         double ca1 = 1 - ca;
         double s, t;
 
-        t = sqrt(dx*dx + dy*dy + dz*dz);
+        t = sqrt(dx * dx + dy * dy + dz * dz);
         if (t < EPSILON) {
             PyErr_Format(PyExc_ValueError, "invalid direction vector");
             goto _fail;
@@ -1235,22 +1311,22 @@ py_rotation_matrix(
         dy /= t;
         dz /= t;
 
-        M[0] =  ca + dx*dx * ca1;
-        M[5] =  ca + dy*dy * ca1;
-        M[10] = ca + dz*dz * ca1;
+        M[0] =  ca + dx * dx * ca1;
+        M[5] =  ca + dy * dy * ca1;
+        M[10] = ca + dz * dz * ca1;
 
         s = dz * sa;
-        t = dx*dy * ca1;
+        t = dx * dy * ca1;
         M[1] = t - s;
         M[4] = t + s;
 
         s = dy * sa;
-        t = dx*dz * ca1;
+        t = dx * dz * ca1;
         M[2] = t + s;
         M[8] = t - s;
 
         s = dx * sa;
-        t = dy*dz * ca1;
+        t = dy * dz * ca1;
         M[6] = t - s;
         M[9] = t + s;
 
@@ -1259,29 +1335,30 @@ py_rotation_matrix(
 
         if (point != NULL) {
             double *p = (double *)PyArray_DATA(point);
-            M[3]  = p[0] - (M[0]*p[0] + M[1]*p[1] + M[2]*p[2]);
-            M[7]  = p[1] - (M[4]*p[0] + M[5]*p[1] + M[6]*p[2]);
-            M[11] = p[2] - (M[8]*p[0] + M[9]*p[1] + M[10]*p[2]);
-        } else {
+            M[3]  = p[0] - (M[0] * p[0] + M[1] * p[1] + M[2] * p[2]);
+            M[7]  = p[1] - (M[4] * p[0] + M[5] * p[1] + M[6] * p[2]);
+            M[11] = p[2] - (M[8] * p[0] + M[9] * p[1] + M[10] * p[2]);
+        }
+        else {
             M[3] = M[7] = M[11] = 0.0;
         }
     }
 
-    Py_XDECREF(point);
+    Py_XDECREF((PyObject *)(point));
     Py_DECREF(direction);
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(point);
-    Py_XDECREF(direction);
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(point));
+    Py_XDECREF((PyObject *)(direction));
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Projection matrix.
 */
-char py_projection_matrix_doc[] =
+static char py_projection_matrix_doc[] =
     "Return matrix to project onto plane defined by point and normal.";
 
 static PyObject *
@@ -1296,17 +1373,28 @@ py_projection_matrix(
     PyArrayObject *direction = NULL;
     PyArrayObject *perspective = NULL;
     PyObject *pseudobj = NULL;
-    Py_ssize_t dims[] = {4, 4};
+    Py_ssize_t dims[] = { 4, 4 };
     int pseudo = 0;
-    static char *kwlist[] = {"point", "normal", "direction",
-                             "perspective", "pseudo", NULL};
+    static char *kwlist[] = { "point", "normal", "direction",
+                              "perspective", "pseudo", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&O&|O&O&O", kwlist,
-        PyConverter_DoubleVector3, &point,
-        PyConverter_DoubleVector3, &normal,
-        PyConverter_DoubleVector3OrNone, &direction,
-        PyConverter_DoubleVector3OrNone, &perspective,
-        &pseudobj)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&O&|O&O&O",
+        kwlist,
+        PyConverter_DoubleVector3,
+        &point,
+        PyConverter_DoubleVector3,
+        &normal,
+        PyConverter_DoubleVector3OrNone,
+        &direction,
+        PyConverter_DoubleVector3OrNone,
+        &perspective,
+        &pseudobj
+        ))
+        goto _fail;
 
     if (pseudobj != NULL)
         pseudo = PyObject_IsTrue(pseudobj);
@@ -1326,7 +1414,7 @@ py_projection_matrix(
         double nx = n[0];
         double ny = n[1];
         double nz = n[2];
-        double t = sqrt(nx*nx + ny*ny + nz*nz);
+        double t = sqrt(nx * nx + ny * ny + nz * nz);
         if (t < EPSILON) {
             PyErr_Format(PyExc_ValueError, "invalid normal vector");
             goto _fail;
@@ -1342,37 +1430,38 @@ py_projection_matrix(
             double dy = d[1];
             double dz = d[2];
 
-            t = (dx-px)*nx + (dy-py)*ny + (dz-pz)*nz;
-            M[0]  = t - dx*nx;
-            M[5]  = t - dy*ny;
-            M[10] = t - dz*nz;
-            M[1] = - dx*ny;
-            M[2] = - dx*nz;
-            M[4] = - dy*nx;
-            M[6] = - dy*nz;
-            M[8] = - dz*nx;
-            M[9] = - dz*ny;
+            t = (dx - px) * nx + (dy - py) * ny + (dz - pz) * nz;
+            M[0]  = t - dx * nx;
+            M[5]  = t - dy * ny;
+            M[10] = t - dz * nz;
+            M[1] = -dx * ny;
+            M[2] = -dx * nz;
+            M[4] = -dy * nx;
+            M[6] = -dy * nz;
+            M[8] = -dz * nx;
+            M[9] = -dz * ny;
 
             if (pseudo) {
                 /* preserve relative depth */
-                M[0]  -= nx*nx;
-                M[5]  -= ny*ny;
-                M[10] -= nz*nz;
-                t = nx*ny;
+                M[0]  -= nx * nx;
+                M[5]  -= ny * ny;
+                M[10] -= nz * nz;
+                t = nx * ny;
                 M[1] -= t;
                 M[4] -= t;
-                t = nx*nz;
+                t = nx * nz;
                 M[2] -= t;
                 M[8] -= t;
-                t = ny*nz;
+                t = ny * nz;
                 M[6] -= t;
                 M[9] -= t;
-                t = px*nx + py*ny + pz*nz;
-                M[3]  = t * (dx+nx);
-                M[7]  = t * (dy+ny);
-                M[11] = t * (dz+nz);
-            } else {
-                t = px*nx + py*ny + pz*nz;
+                t = px * nx + py * ny + pz * nz;
+                M[3]  = t * (dx + nx);
+                M[7]  = t * (dy + ny);
+                M[11] = t * (dz + nz);
+            }
+            else {
+                t = px * nx + py * ny + pz * nz;
                 M[3]  = t * dx;
                 M[7]  = t * dy;
                 M[11] = t * dz;
@@ -1380,45 +1469,49 @@ py_projection_matrix(
             M[12] = -nx;
             M[13] = -ny;
             M[14] = -nz;
-            M[15] = dx*nx + dy*ny + dz*nz;
-        } else if (direction) {
+            M[15] = dx * nx + dy * ny + dz * nz;
+        }
+        else if (direction) {
             /* parallel projection */
             double *d = (double *)PyArray_DATA(direction);
             double dx = d[0];
             double dy = d[1];
             double dz = d[2];
-            double scale = dx*nx + dy*ny + dz*nz;
+            double scale = dx * nx + dy * ny + dz * nz;
 
             if (ISZERO(scale)) {
-                PyErr_Format(PyExc_ValueError,
-                    "normal and direction vectors are orthogonal");
+                PyErr_Format(
+                    PyExc_ValueError,
+                    "normal and direction vectors are orthogonal"
+                );
                 goto _fail;
             }
             scale = -1.0 / scale;
-            M[0]  = 1.0 + scale * dx*nx;
-            M[5]  = 1.0 + scale * dy*ny;
-            M[10] = 1.0 + scale * dz*nz;
-            M[1] = scale * dx*ny;
-            M[2] = scale * dx*nz;
-            M[4] = scale * dy*nx;
-            M[6] = scale * dy*nz;
-            M[8] = scale * dz*nx;
-            M[9] = scale * dz*ny;
-            t = (px*nx + py*ny + pz*nz) * -scale;
+            M[0]  = 1.0 + scale * dx * nx;
+            M[5]  = 1.0 + scale * dy * ny;
+            M[10] = 1.0 + scale * dz * nz;
+            M[1] = scale * dx * ny;
+            M[2] = scale * dx * nz;
+            M[4] = scale * dy * nx;
+            M[6] = scale * dy * nz;
+            M[8] = scale * dz * nx;
+            M[9] = scale * dz * ny;
+            t = (px * nx + py * ny + pz * nz) * -scale;
             M[3]  = t * dx;
             M[7]  = t * dy;
             M[11] = t * dz;
             M[12] = M[13] = M[14] = 0.0;
             M[15] = 1.0;
-        } else {
+        }
+        else {
             /* orthogonal projection */
-            M[0]  = 1.0 - nx*nx;
-            M[5]  = 1.0 - ny*ny;
-            M[10] = 1.0 - nz*nz;
-            M[1] = M[4] = - nx*ny;
-            M[2] = M[8] = - nx*nz;
-            M[6] = M[9] = - ny*nz;
-            t = px*nx + py*ny + pz*nz;
+            M[0]  = 1.0 - nx * nx;
+            M[5]  = 1.0 - ny * ny;
+            M[10] = 1.0 - nz * nz;
+            M[1] = M[4] = -nx * ny;
+            M[2] = M[8] = -nx * nz;
+            M[6] = M[9] = -ny * nz;
+            t = px * nx + py * ny + pz * nz;
             M[3]  = t * nx;
             M[7]  = t * ny;
             M[11] = t * nz;
@@ -1429,23 +1522,23 @@ py_projection_matrix(
 
     Py_DECREF(point);
     Py_DECREF(normal);
-    Py_XDECREF(direction);
-    Py_XDECREF(perspective);
+    Py_XDECREF((PyObject *)(direction));
+    Py_XDECREF((PyObject *)(perspective));
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(point);
-    Py_XDECREF(normal);
-    Py_XDECREF(direction);
-    Py_XDECREF(perspective);
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(point));
+    Py_XDECREF((PyObject *)(normal));
+    Py_XDECREF((PyObject *)(direction));
+    Py_XDECREF((PyObject *)(perspective));
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Clipping matrix.
 */
-char py_clip_matrix_doc[] =
+static char py_clip_matrix_doc[] =
     "Return matrix to obtain normalized device coordinates from frustum.";
 
 static PyObject *
@@ -1456,15 +1549,27 @@ py_clip_matrix(
 {
     PyArrayObject *result = NULL;
     PyObject *boolobj = NULL;
-    Py_ssize_t dims[] = {4, 4};
+    Py_ssize_t dims[] = { 4, 4 };
     double *M;
     double left, right, bottom, top, hither, yon;
     int perspective = 0;
-    static char *kwlist[] = {"left", "right", "bottom",
-                             "top", "near", "far", "perspective", NULL};
+    static char *kwlist[] = { "left", "right", "bottom",
+                              "top", "near", "far", "perspective", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "dddddd|O", kwlist,
-        &left, &right, &bottom, &top, &hither, &yon, &boolobj))
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "dddddd|$O",
+        kwlist,
+        &left,
+        &right,
+        &bottom,
+        &top,
+        &hither,
+        &yon,
+        &boolobj
+        ))
         goto _fail;
 
     if (boolobj != NULL)
@@ -1491,34 +1596,35 @@ py_clip_matrix(
         }
         M[1] = M[3] = M[4] = M[7] = M[8] = M[9] = M[12] = M[13] = M[15] = 0.0;
         M[14] = -1.0;
-        M[0] = t / (left-right);
-        M[2] = (right+left) / (right-left);
-        M[5] = t / (bottom-top);
-        M[6] = (top+bottom) / (top-bottom);
-        M[10] = (yon+hither) / (hither-yon);
-        M[11] = t*yon / (yon-hither);
-    } else {
+        M[0] = t / (left - right);
+        M[2] = (right + left) / (right - left);
+        M[5] = t / (bottom - top);
+        M[6] = (top + bottom) / (top - bottom);
+        M[10] = (yon + hither) / (hither - yon);
+        M[11] = t * yon / (yon - hither);
+    }
+    else {
         M[1] = M[2] = M[4] = M[6] = M[8] = M[9] = M[12] = M[13] = M[14] = 0.0;
         M[15] = 1.0;
-        M[0] = 2.0 / (right-left);
-        M[3] = (right+left) / (left-right);
-        M[5] = 2.0 / (top-bottom);
-        M[7] = (top+bottom) / (bottom-top);
-        M[10] = 2.0 / (yon-hither);
-        M[11] = (yon+hither) / (hither-yon);
+        M[0] = 2.0 / (right - left);
+        M[3] = (right + left) / (left - right);
+        M[5] = 2.0 / (top - bottom);
+        M[7] = (top + bottom) / (bottom - top);
+        M[10] = 2.0 / (yon - hither);
+        M[11] = (yon + hither) / (hither - yon);
     }
 
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Scale matrix.
 */
-char py_scale_matrix_doc[] =
+static char py_scale_matrix_doc[] =
     "Return matrix to scale by factor around origin in direction.";
 
 static PyObject *
@@ -1530,14 +1636,23 @@ py_scale_matrix(
     PyArrayObject *result = NULL;
     PyArrayObject *origin = NULL;
     PyArrayObject *direction = NULL;
-    Py_ssize_t dims[] = {4, 4};
+    Py_ssize_t dims[] = { 4, 4 };
     double factor;
-    static char *kwlist[] = {"factor", "origin", "direction", NULL};
+    static char *kwlist[] = { "factor", "origin", "direction", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "d|O&O&", kwlist,
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "d|O&O&",
+        kwlist,
         &factor,
-        PyConverter_DoubleVector3OrNone, &origin,
-        PyConverter_DoubleVector3OrNone, &direction)) goto _fail;
+        PyConverter_DoubleVector3OrNone,
+        &origin,
+        PyConverter_DoubleVector3OrNone,
+        &direction
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -1547,7 +1662,7 @@ py_scale_matrix(
     {
         double *M = (double *)PyArray_DATA(result);
         if (direction == NULL) {
-            memset(M, 0, 16*sizeof(double));
+            memset(M, 0, 16 * sizeof(double));
             M[0] = M[5] = M[10] = factor;
             M[15] = 1.0;
             if (origin != NULL) {
@@ -1557,48 +1672,50 @@ py_scale_matrix(
                 M[7]  = factor * p[1];
                 M[11] = factor * p[2];
             }
-        } else {
+        }
+        else {
             double *d = (double *)PyArray_DATA(direction);
             double dx = d[0];
             double dy = d[1];
             double dz = d[2];
             factor = 1.0 - factor;
-            M[0]  = 1.0 - factor * dx*dx;
-            M[5]  = 1.0 - factor * dy*dy;
-            M[10] = 1.0 - factor * dz*dz;
+            M[0]  = 1.0 - factor * dx * dx;
+            M[5]  = 1.0 - factor * dy * dy;
+            M[10] = 1.0 - factor * dz * dz;
             factor *= -1.0;
-            M[1] = M[4] = factor * dx*dy;
-            M[2] = M[8] = factor * dx*dz;
-            M[6] = M[9] = factor * dy*dz;
+            M[1] = M[4] = factor * dx * dy;
+            M[2] = M[8] = factor * dx * dz;
+            M[6] = M[9] = factor * dy * dz;
             M[12] = M[13] = M[14] = 0.0;
             M[15] = 1.0;
             if (origin != NULL) {
                 double *p = (double *)PyArray_DATA(origin);
-                factor *= - (p[0]*dx + p[1]*dy + p[2]*dz);
+                factor *= -(p[0] * dx + p[1] * dy + p[2] * dz);
                 M[3]  = factor * dx;
                 M[7]  = factor * dy;
                 M[11] = factor * dz;
-            } else {
+            }
+            else {
                 M[3] = M[7] = M[11] = 0.0;
             }
         }
     }
 
-    Py_XDECREF(origin);
-    Py_XDECREF(direction);
+    Py_XDECREF((PyObject *)(origin));
+    Py_XDECREF((PyObject *)(direction));
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(origin);
-    Py_XDECREF(direction);
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(origin));
+    Py_XDECREF((PyObject *)(direction));
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Shearing matrix.
 */
-char py_shear_matrix_doc[] =
+static char py_shear_matrix_doc[] =
     "Return matrix to shear by angle along direction vector on shear plane.";
 
 static PyObject *
@@ -1611,15 +1728,25 @@ py_shear_matrix(
     PyArrayObject *direction = NULL;
     PyArrayObject *point = NULL;
     PyArrayObject *normal = NULL;
-    Py_ssize_t dims[] = {4, 4};
+    Py_ssize_t dims[] = { 4, 4 };
     double angle;
-    static char *kwlist[] = {"angle", "direction", "point", "normal", NULL};
+    static char *kwlist[] = { "angle", "direction", "point", "normal", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "dO&O&O&", kwlist,
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "dO&O&O&",
+        kwlist,
         &angle,
-        PyConverter_DoubleVector3, &direction,
-        PyConverter_DoubleVector3, &point,
-        PyConverter_DoubleVector3, &normal)) goto _fail;
+        PyConverter_DoubleVector3,
+        &direction,
+        PyConverter_DoubleVector3,
+        &point,
+        PyConverter_DoubleVector3,
+        &normal
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -1639,7 +1766,7 @@ py_shear_matrix(
         double nz = n[2];
         double t;
 
-        t = sqrt(dx*dx + dy*dy + dz*dz);
+        t = sqrt(dx * dx + dy * dy + dz * dz);
         if (t < EPSILON) {
             PyErr_Format(PyExc_ValueError, "invalid direction vector");
             goto _fail;
@@ -1648,7 +1775,7 @@ py_shear_matrix(
         dy /= t;
         dz /= t;
 
-        t = sqrt(nx*nx + ny*ny + nz*nz);
+        t = sqrt(nx * nx + ny * ny + nz * nz);
         if (t < EPSILON) {
             PyErr_Format(PyExc_ValueError, "invalid normal vector");
             goto _fail;
@@ -1657,27 +1784,29 @@ py_shear_matrix(
         ny /= t;
         nz /= t;
 
-        if (fabs(nx*dx + ny*dy + nz*dz) > 1e-6) {
-            PyErr_Format(PyExc_ValueError,
-                "direction and normal vectors are not orthogonal");
+        if (fabs(nx * dx + ny * dy + nz * dz) > 1e-6) {
+            PyErr_Format(
+                PyExc_ValueError,
+                "direction and normal vectors are not orthogonal"
+            );
             goto _fail;
         }
 
         angle = tan(angle);
 
-        M[0]  = 1.0 + angle * dx*nx;
-        M[5]  = 1.0 + angle * dy*ny;
-        M[10] = 1.0 + angle * dz*nz;
-        M[1] = angle * dx*ny;
-        M[2] = angle * dx*nz;
-        M[4] = angle * dy*nx;
-        M[6] = angle * dy*nz;
-        M[8] = angle * dz*nx;
-        M[9] = angle * dz*ny;
+        M[0]  = 1.0 + angle * dx * nx;
+        M[5]  = 1.0 + angle * dy * ny;
+        M[10] = 1.0 + angle * dz * nz;
+        M[1] = angle * dx * ny;
+        M[2] = angle * dx * nz;
+        M[4] = angle * dy * nx;
+        M[6] = angle * dy * nz;
+        M[8] = angle * dz * nx;
+        M[9] = angle * dz * ny;
         M[12] = M[13] = M[14] = 0.0;
         M[15] = 1.0;
 
-        t = -angle * (p[0]*nx + p[1]*ny + p[2]*nz);
+        t = -angle * (p[0] * nx + p[1] * ny + p[2] * nz);
         M[3]  = t * dx;
         M[7]  = t * dy;
         M[11] = t * dz;
@@ -1688,18 +1817,18 @@ py_shear_matrix(
     Py_DECREF(normal);
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(direction);
-    Py_XDECREF(point);
-    Py_XDECREF(normal);
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(direction));
+    Py_XDECREF((PyObject *)(point));
+    Py_XDECREF((PyObject *)(normal));
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Superimposition matrix.
 */
-char py_superimposition_matrix_doc[] =
+static char py_superimposition_matrix_doc[] =
     "Return matrix to transform given vector set into second vector set.";
 
 static PyObject *
@@ -1715,15 +1844,25 @@ py_superimposition_matrix(
     PyObject *usesvdobj = NULL;
     PyObject *scalingobj = NULL;
     double *buffer = NULL;
-    Py_ssize_t dims[] = {4, 4};
+    Py_ssize_t dims[] = { 4, 4 };
     int scaling = 0;
 
-    static char *kwlist[] = {"v0", "v1", "scale", "usesvd", NULL};
+    static char *kwlist[] = { "v0", "v1", "scale", "usesvd", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&O&|OO", kwlist,
-        PyConverter_AnyDoubleArray, &v0,
-        PyConverter_AnyDoubleArray, &v1,
-        &scalingobj, &usesvdobj)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&O&|$OO",
+        kwlist,
+        PyConverter_AnyDoubleArray,
+        &v0,
+        PyConverter_AnyDoubleArray,
+        &v1,
+        &scalingobj,
+        &usesvdobj
+        ))
+        goto _fail;
 
     if (scalingobj != NULL)
         scaling = PyObject_IsTrue(scalingobj);
@@ -1734,8 +1873,10 @@ py_superimposition_matrix(
     }
 
     if ((PyArray_NDIM(v0) != 2) || PyArray_DIM(v0, 0) < 3) {
-        PyErr_Format(PyExc_ValueError,
-            "vector sets are of wrong shape or type");
+        PyErr_Format(
+            PyExc_ValueError,
+            "vector sets are of wrong shape or type"
+        );
         goto _fail;
     }
 
@@ -1770,17 +1911,18 @@ py_superimposition_matrix(
                 double *p;
                 for (j = 0; j < 3; j++) {
                     t = 0.0;
-                    p = (double*)((char *)PyArray_DATA(v0) + j*v0s0);
+                    p = (double*)((char *)PyArray_DATA(v0) + j * v0s0);
                     for (i = 0; i < size; i++) {
                         t += p[i];
                     }
                     v0t[j] = t / (double)size;
                 }
-            } else {
+            }
+            else {
                 char *p;
                 for (j = 0; j < 3; j++) {
                     t = 0.0;
-                    p = (char *)PyArray_DATA(v0) + j*v0s0;
+                    p = (char *)PyArray_DATA(v0) + j * v0s0;
                     for (i = 0; i < size; i++) {
                         t += *(double*)p;
                         p += v0s1;
@@ -1792,17 +1934,18 @@ py_superimposition_matrix(
                 double *p;
                 for (j = 0; j < 3; j++) {
                     t = 0.0;
-                    p = (double*)((char *)PyArray_DATA(v1) + j*v1s0);
+                    p = (double*)((char *)PyArray_DATA(v1) + j * v1s0);
                     for (i = 0; i < size; i++) {
                         t += p[i];
                     }
                     v1t[j] = t / (double)size;
                 }
-            } else {
+            }
+            else {
                 char *p;
                 for (j = 0; j < 3; j++) {
                     t = 0.0;
-                    p = (char *)PyArray_DATA(v1) + j*v1s0;
+                    p = (char *)PyArray_DATA(v1) + j * v1s0;
                     for (i = 0; i < size; i++) {
                         t += *(double*)p;
                         p += v1s1;
@@ -1820,10 +1963,10 @@ py_superimposition_matrix(
                 double t, v0x, v0y, v0z;
                 double *v0px = (double *)PyArray_DATA(v0);
                 double *v0py = (double *)((char *)PyArray_DATA(v0) + v0s0);
-                double *v0pz = (double *)((char *)PyArray_DATA(v0) + v0s0*2);
+                double *v0pz = (double *)((char *)PyArray_DATA(v0) + v0s0 * 2);
                 double *v1px = (double *)PyArray_DATA(v1);
                 double *v1py = (double *)((char *)PyArray_DATA(v1) + v1s0);
-                double *v1pz = (double *)((char *)PyArray_DATA(v1) + v1s0*2);
+                double *v1pz = (double *)((char *)PyArray_DATA(v1) + v1s0 * 2);
 
                 #pragma vector always
                 for (i = 0; i < size; i++) {
@@ -1844,7 +1987,8 @@ py_superimposition_matrix(
                     yz += v0y * t;
                     zz += v0z * t;
                 }
-            } else {
+            }
+            else {
                 double t, v1x, v1y, v1z;
                 char *v0p = PyArray_DATA(v0);
                 char *v1p = PyArray_DATA(v1);
@@ -1898,8 +2042,10 @@ py_superimposition_matrix(
 
             if (tridiagonalize_symmetric_44(M, a, b) != 0) {
                 PyEval_RestoreThread(_save);
-                PyErr_Format(PyExc_ValueError,
-                    "tridiagonalize_symmetric_44() failed");
+                PyErr_Format(
+                    PyExc_ValueError,
+                    "tridiagonalize_symmetric_44() failed"
+                );
                 goto _fail;
             }
 
@@ -1911,8 +2057,10 @@ py_superimposition_matrix(
 
             if (eigenvector_of_symmetric_44(N, q, t) != 0) {
                 PyEval_RestoreThread(_save);
-                PyErr_Format(PyExc_ValueError,
-                    "eigenvector_of_symmetric_44() failed");
+                PyErr_Format(
+                    PyExc_ValueError,
+                    "eigenvector_of_symmetric_44() failed"
+                );
                 goto _fail;
             }
 
@@ -1940,22 +2088,23 @@ py_superimposition_matrix(
             if (v0s1 == sizeof(double)) {
                 double *p;
                 for (j = 0; j < 3; j++) {
-                    p = (double*)((char *)PyArray_DATA(v0) + j*v0s0);
+                    p = (double*)((char *)PyArray_DATA(v0) + j * v0s0);
                     dt = v0t[j];
                     #pragma vector always
                     for (i = 0; i < size; i++) {
                         t = p[i] - dt;
-                        v0s += t*t;
+                        v0s += t * t;
                     }
                 }
-            } else {
+            }
+            else {
                 char *p;
                 for (j = 0; j < 3; j++) {
-                    p = (char *)PyArray_DATA(v0) + j*v0s0;
+                    p = (char *)PyArray_DATA(v0) + j * v0s0;
                     dt = v0t[j];
                     for (i = 0; i < size; i++) {
                         t = (*(double*)p) - dt;
-                        v0s += t*t;
+                        v0s += t * t;
                         p += v0s1;
                     }
                 }
@@ -1964,22 +2113,23 @@ py_superimposition_matrix(
             if (v1s1 == sizeof(double)) {
                 double *p;
                 for (j = 0; j < 3; j++) {
-                    p = (double*)((char *)PyArray_DATA(v1) + j*v1s0);
+                    p = (double*)((char *)PyArray_DATA(v1) + j * v1s0);
                     dt = v1t[j];
                     #pragma vector always
                     for (i = 0; i < size; i++) {
                         t = p[i] - dt;
-                        v1s += t*t;
+                        v1s += t * t;
                     }
                 }
-            } else {
+            }
+            else {
                 char *p;
                 for (j = 0; j < 3; j++) {
-                    p = (char *)PyArray_DATA(v1) + j*v1s0;
+                    p = (char *)PyArray_DATA(v1) + j * v1s0;
                     dt = v1t[j];
                     for (i = 0; i < size; i++) {
                         t = (*(double*)p) - dt;
-                        v1s += t*t;
+                        v1s += t * t;
                         p += v1s1;
                     }
                 }
@@ -1998,9 +2148,9 @@ py_superimposition_matrix(
         }
 
         /* translation */
-        M[3]  = v1t[0] - M[0]*v0t[0] - M[1]*v0t[1] - M[2]*v0t[2];
-        M[7]  = v1t[1] - M[4]*v0t[0] - M[5]*v0t[1] - M[6]*v0t[2];
-        M[11] = v1t[2] - M[8]*v0t[0] - M[9]*v0t[1] - M[10]*v0t[2];
+        M[3]  = v1t[0] - M[0] * v0t[0] - M[1] * v0t[1] - M[2] * v0t[2];
+        M[7]  = v1t[1] - M[4] * v0t[0] - M[5] * v0t[1] - M[6] * v0t[2];
+        M[11] = v1t[2] - M[8] * v0t[0] - M[9] * v0t[1] - M[10] * v0t[2];
     }
 
     PyMem_Free(buffer);
@@ -2008,18 +2158,18 @@ py_superimposition_matrix(
     Py_DECREF(v1);
     return PyArray_Return(result);
 
-  _fail:
+_fail:
     PyMem_Free(buffer);
-    Py_XDECREF(v0);
-    Py_XDECREF(v1);
-    Py_XDECREF(result);
+    Py_XDECREF((PyObject *)(v0));
+    Py_XDECREF((PyObject *)(v1));
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Orthogonalization matrix.
 */
-char py_orthogonalization_matrix_doc[] =
+static char py_orthogonalization_matrix_doc[] =
     "Return orthogonalization matrix for crystallographic cell coordinates.";
 
 static PyObject *
@@ -2031,12 +2181,21 @@ py_orthogonalization_matrix(
     PyArrayObject *result = NULL;
     PyArrayObject *lengths = NULL;
     PyArrayObject *angles = NULL;
-    Py_ssize_t dims[] = {4, 4};
-    static char *kwlist[] = {"lengths", "angles", NULL};
+    Py_ssize_t dims[] = { 4, 4 };
+    static char *kwlist[] = { "lengths", "angles", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&O&", kwlist,
-        PyConverter_DoubleVector3, &lengths,
-        PyConverter_DoubleVector3, &angles)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&O&",
+        kwlist,
+        PyConverter_DoubleVector3,
+        &lengths,
+        PyConverter_DoubleVector3,
+        &angles
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -2056,14 +2215,14 @@ py_orthogonalization_matrix(
         double cg = cos(a[2] * DEG2RAD);
         double t = ca * cb - cg;
 
-        if ((fabs(sa*sb) < EPSILON) || (fabs(t-sa*sb) < EPSILON)) {
+        if ((fabs(sa * sb) < EPSILON) || (fabs(t - sa * sb) < EPSILON)) {
             PyErr_Format(PyExc_ValueError, "invalid cell geometry");
             goto _fail;
         }
         t /= (sa * sb);
         M[15] = 1.0;
         M[1] = M[2] = M[3] = M[6] = M[7] = M[11] = M[12] = M[13] = M[14] = 0.0;
-        M[0] = la * sb * sqrt(1.0-t*t);
+        M[0] = la * sb * sqrt(1.0 - t * t);
         M[4] = -la * sb * t;
         M[5] = lb * sa;
         M[8] = la * cb;
@@ -2075,10 +2234,10 @@ py_orthogonalization_matrix(
     Py_DECREF(angles);
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(lengths);
-    Py_XDECREF(angles);
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(lengths));
+    Py_XDECREF((PyObject *)(angles));
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
@@ -2090,99 +2249,123 @@ static int axis2tuple(
     int *firstaxis,
     int *parity,
     int *repetition,
-    int *frame
-)
+    int *frame)
 {
     *firstaxis = 0; *parity = 0; *repetition = 0; *frame = 0;
     if (axes == NULL)
         return 0;
 
     /* axes strings */
-    if (PyUnicode_Check(axes) && (PyUnicode_GET_LENGTH(axes) == 4)) {
+    if (PyUnicode_Check(axes) && (PyUnicode_GetLength(axes) == 4)) {
         PyObject* axes_ascii = PyUnicode_AsASCIIString(axes);
         char *s = PyBytes_AsString(axes_ascii);
         if (s == NULL) {
             Py_XDECREF(axes_ascii);
             return -1;
         }
-        int hash = *((int *)s);
+        int hash;
+        memcpy(&hash, s, sizeof(int));
         switch (hash)
         {
-        case 2054781043:
-        case 1937275258: /* sxyz */
-            *firstaxis = 0; *parity = 0; *repetition = 0; *frame = 0; break;
-        case 2054781042:
-        case 1920498042: /* rxyz */
-            *firstaxis = 2; *parity = 1; *repetition = 0; *frame = 1; break;
-        case 2037938802:
-        case 1920628857: /* rzxy */
-            *firstaxis = 1; *parity = 1; *repetition = 0; *frame = 1; break;
-        case 2054716018:
-        case 1920628858: /* rzxz */
-            *firstaxis = 2; *parity = 0; *repetition = 1; *frame = 1; break;
-        case 2054716019:
-        case 1937406074: /* szxz */
-            *firstaxis = 2; *parity = 0; *repetition = 1; *frame = 0; break;
-        case 2037938803:
-        case 1937406073: /* szxy */
-            *firstaxis = 2; *parity = 0; *repetition = 0; *frame = 0; break;
-        case 2038069618:
-        case 1920563833: /* ryzy */
-            *firstaxis = 1; *parity = 0; *repetition = 1; *frame = 1; break;
-        case 2021292402:
-        case 1920563832: /* ryzx */
-            *firstaxis = 0; *parity = 1; *repetition = 0; *frame = 1; break;
-        case 2054715762:
-        case 1920563322: /* ryxz */
-            *firstaxis = 2; *parity = 0; *repetition = 0; *frame = 1; break;
-        case 2037938546:
-        case 1920563321: /* ryxy */
-            *firstaxis = 1; *parity = 1; *repetition = 1; *frame = 1; break;
-        case 2021292146:
-        case 1920498296: /* rxzx */
-            *firstaxis = 0; *parity = 1; *repetition = 1; *frame = 1; break;
-        case 2038069362:
-        case 1920498297: /* rxzy */
-            *firstaxis = 1; *parity = 0; *repetition = 0; *frame = 1; break;
-        case 2021226611:
-        case 1937275256: /* sxyx */
-            *firstaxis = 0; *parity = 0; *repetition = 1; *frame = 0; break;
-        case 2038069363:
-        case 1937275513: /* sxzy */
-            *firstaxis = 0; *parity = 1; *repetition = 0; *frame = 0; break;
-        case 2054781554:
-        case 1920629114: /* rzyz */
-            *firstaxis = 2; *parity = 1; *repetition = 1; *frame = 1; break;
-        case 2021227122:
-        case 1920629112: /* rzyx */
-            *firstaxis = 0; *parity = 0; *repetition = 0; *frame = 1; break;
-        case 2021227123:
-        case 1937406328: /* szyx */
-            *firstaxis = 2; *parity = 1; *repetition = 0; *frame = 0; break;
-        case 2054781555:
-        case 1937406330: /* szyz */
-            *firstaxis = 2; *parity = 1; *repetition = 1; *frame = 0; break;
-        case 2021226610:
-        case 1920498040: /* rxyx */
-            *firstaxis = 0; *parity = 0; *repetition = 1; *frame = 1; break;
-        case 2021292403:
-        case 1937341048: /* syzx */
-            *firstaxis = 1; *parity = 0; *repetition = 0; *frame = 0; break;
-        case 2038069619:
-        case 1937341049: /* syzy */
-            *firstaxis = 1; *parity = 0; *repetition = 1; *frame = 0; break;
-        case 2037938547:
-        case 1937340537: /* syxy */
-            *firstaxis = 1; *parity = 1; *repetition = 1; *frame = 0; break;
-        case 2054715763:
-        case 1937340538: /* syxz */
-            *firstaxis = 1; *parity = 1; *repetition = 0; *frame = 0; break;
-        case 2021292147:
-        case 1937275512: /* sxzx */
-            *firstaxis = 0; *parity = 1; *repetition = 1; *frame = 0; break;
-        default:
-            PyErr_Format(PyExc_ValueError, "invalid axes string");
-            return -1;
+            case 2054781043:
+            case 1937275258: /* sxyz */
+                *firstaxis = 0; *parity = 0; *repetition = 0; *frame = 0;
+                break;
+            case 2054781042:
+            case 1920498042: /* rxyz */
+                *firstaxis = 2; *parity = 1; *repetition = 0; *frame = 1;
+                break;
+            case 2037938802:
+            case 1920628857: /* rzxy */
+                *firstaxis = 1; *parity = 1; *repetition = 0; *frame = 1;
+                break;
+            case 2054716018:
+            case 1920628858: /* rzxz */
+                *firstaxis = 2; *parity = 0; *repetition = 1; *frame = 1;
+                break;
+            case 2054716019:
+            case 1937406074: /* szxz */
+                *firstaxis = 2; *parity = 0; *repetition = 1; *frame = 0;
+                break;
+            case 2037938803:
+            case 1937406073: /* szxy */
+                *firstaxis = 2; *parity = 0; *repetition = 0; *frame = 0;
+                break;
+            case 2038069618:
+            case 1920563833: /* ryzy */
+                *firstaxis = 1; *parity = 0; *repetition = 1; *frame = 1;
+                break;
+            case 2021292402:
+            case 1920563832: /* ryzx */
+                *firstaxis = 0; *parity = 1; *repetition = 0; *frame = 1;
+                break;
+            case 2054715762:
+            case 1920563322: /* ryxz */
+                *firstaxis = 2; *parity = 0; *repetition = 0; *frame = 1;
+                break;
+            case 2037938546:
+            case 1920563321: /* ryxy */
+                *firstaxis = 1; *parity = 1; *repetition = 1; *frame = 1;
+                break;
+            case 2021292146:
+            case 1920498296: /* rxzx */
+                *firstaxis = 0; *parity = 1; *repetition = 1; *frame = 1;
+                break;
+            case 2038069362:
+            case 1920498297: /* rxzy */
+                *firstaxis = 1; *parity = 0; *repetition = 0; *frame = 1;
+                break;
+            case 2021226611:
+            case 1937275256: /* sxyx */
+                *firstaxis = 0; *parity = 0; *repetition = 1; *frame = 0;
+                break;
+            case 2038069363:
+            case 1937275513: /* sxzy */
+                *firstaxis = 0; *parity = 1; *repetition = 0; *frame = 0;
+                break;
+            case 2054781554:
+            case 1920629114: /* rzyz */
+                *firstaxis = 2; *parity = 1; *repetition = 1; *frame = 1;
+                break;
+            case 2021227122:
+            case 1920629112: /* rzyx */
+                *firstaxis = 0; *parity = 0; *repetition = 0; *frame = 1;
+                break;
+            case 2021227123:
+            case 1937406328: /* szyx */
+                *firstaxis = 2; *parity = 1; *repetition = 0; *frame = 0;
+                break;
+            case 2054781555:
+            case 1937406330: /* szyz */
+                *firstaxis = 2; *parity = 1; *repetition = 1; *frame = 0;
+                break;
+            case 2021226610:
+            case 1920498040: /* rxyx */
+                *firstaxis = 0; *parity = 0; *repetition = 1; *frame = 1;
+                break;
+            case 2021292403:
+            case 1937341048: /* syzx */
+                *firstaxis = 1; *parity = 0; *repetition = 0; *frame = 0;
+                break;
+            case 2038069619:
+            case 1937341049: /* syzy */
+                *firstaxis = 1; *parity = 0; *repetition = 1; *frame = 0;
+                break;
+            case 2037938547:
+            case 1937340537: /* syxy */
+                *firstaxis = 1; *parity = 1; *repetition = 1; *frame = 0;
+                break;
+            case 2054715763:
+            case 1937340538: /* syxz */
+                *firstaxis = 1; *parity = 1; *repetition = 0; *frame = 0;
+                break;
+            case 2021292147:
+            case 1937275512: /* sxzx */
+                *firstaxis = 0; *parity = 1; *repetition = 1; *frame = 0;
+                break;
+            default:
+                PyErr_Format(PyExc_ValueError, "invalid axes string");
+                return -1;
         }
         Py_XDECREF(axes_ascii);
         return 0;
@@ -2190,14 +2373,16 @@ static int axis2tuple(
 
     if (PySequence_Check(axes) && (PySequence_Size(axes) == 4)) {
         /* axes tuples */
-        *firstaxis = (int)PySequence_GetInteger(axes, 0);
-        *parity = (int)PySequence_GetInteger(axes, 1);
-        *repetition = (int)PySequence_GetInteger(axes, 2);
-        *frame = (int)PySequence_GetInteger(axes, 3);
-        if (((*firstaxis != 0) && (*firstaxis != 1) && (*firstaxis != 2)) ||
+        *firstaxis = (int)py_sequence_get_integer(axes, 0);
+        *parity = (int)py_sequence_get_integer(axes, 1);
+        *repetition = (int)py_sequence_get_integer(axes, 2);
+        *frame = (int)py_sequence_get_integer(axes, 3);
+        if (
+            ((*firstaxis != 0) && (*firstaxis != 1) && (*firstaxis != 2)) ||
             ((*parity != 0) && (*parity != 1)) ||
             ((*repetition != 0) && (*repetition != 1)) ||
-            ((*frame != 0) && (*frame != 1))) {
+            ((*frame != 0) && (*frame != 1)))
+        {
             PyErr_Format(PyExc_ValueError, "invalid axes sequence");
             return -1;
         }
@@ -2211,7 +2396,7 @@ static int axis2tuple(
 /*
 Matrix from Euler angles.
 */
-char py_euler_matrix_doc[] =
+static char py_euler_matrix_doc[] =
     "Return homogeneous rotation matrix from Euler angles and axis sequence.";
 
 static PyObject *
@@ -2222,17 +2407,27 @@ py_euler_matrix(
 {
     PyArrayObject *result = NULL;
     PyObject *axes = NULL;
-    Py_ssize_t dims[] = {4, 4};
-    int next_axis[] = {1, 2, 0, 1};
+    Py_ssize_t dims[] = { 4, 4 };
+    int next_axis[] = { 1, 2, 0, 1 };
     double ai, aj, ak;
     int firstaxis = 0;
     int parity = 0;
     int repetition = 0;
     int frame = 0;
-    static char *kwlist[] = {"ai", "aj", "ak", "axes", NULL};
+    static char *kwlist[] = { "ai", "aj", "ak", "axes", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "ddd|O", kwlist,
-        &ai, &aj, &ak, &axes)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "ddd|O",
+        kwlist,
+        &ai,
+        &aj,
+        &ak,
+        &axes
+        ))
+        goto _fail;
 
     if (axes != NULL) Py_INCREF(axes);
 
@@ -2249,8 +2444,8 @@ py_euler_matrix(
     {
         double *M = (double *)PyArray_DATA(result);
         int i = firstaxis;
-        int j = next_axis[i+parity];
-        int k = next_axis[i-parity+1];
+        int j = next_axis[i + parity];
+        int k = next_axis[i - parity + 1];
         double t;
         double si, sj, sk, ci, cj, ck, cc, cs, sc, ss;
 
@@ -2272,31 +2467,32 @@ py_euler_matrix(
         ci = cos(ai);
         cj = cos(aj);
         ck = cos(ak);
-        cc = ci*ck;
-        cs = ci*sk;
-        sc = si*ck;
-        ss = si*sk;
+        cc = ci * ck;
+        cs = ci * sk;
+        sc = si * ck;
+        ss = si * sk;
 
         if (repetition) {
-            M[4*i+i] = cj;
-            M[4*i+j] = sj*si;
-            M[4*i+k] = sj*ci;
-            M[4*j+i] = sj*sk;
-            M[4*j+j] = -cj*ss+cc;
-            M[4*j+k] = -cj*cs-sc;
-            M[4*k+i] = -sj*ck;
-            M[4*k+j] = cj*sc+cs;
-            M[4*k+k] = cj*cc-ss;
-        } else {
-            M[4*i+i] = cj*ck;
-            M[4*i+j] = sj*sc-cs;
-            M[4*i+k] = sj*cc+ss;
-            M[4*j+i] = cj*sk;
-            M[4*j+j] = sj*ss+cc;
-            M[4*j+k] = sj*cs-sc;
-            M[4*k+i] = -sj;
-            M[4*k+j] = cj*si;
-            M[4*k+k] = cj*ci;
+            M[4 * i + i] = cj;
+            M[4 * i + j] = sj * si;
+            M[4 * i + k] = sj * ci;
+            M[4 * j + i] = sj * sk;
+            M[4 * j + j] = -cj * ss + cc;
+            M[4 * j + k] = -cj * cs - sc;
+            M[4 * k + i] = -sj * ck;
+            M[4 * k + j] = cj * sc + cs;
+            M[4 * k + k] = cj * cc - ss;
+        }
+        else {
+            M[4 * i + i] = cj * ck;
+            M[4 * i + j] = sj * sc - cs;
+            M[4 * i + k] = sj * cc + ss;
+            M[4 * j + i] = cj * sk;
+            M[4 * j + j] = sj * ss + cc;
+            M[4 * j + k] = sj * cs - sc;
+            M[4 * k + i] = -sj;
+            M[4 * k + j] = cj * si;
+            M[4 * k + k] = cj * ci;
         }
 
         M[3] = M[7] = M[11] = M[12] = M[13] = M[14] = 0.0;
@@ -2305,16 +2501,16 @@ py_euler_matrix(
 
     return PyArray_Return(result);
 
-  _fail:
+_fail:
     Py_XDECREF(axes);
-    Py_XDECREF(result);
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Euler angles from matrix.
 */
-char py_euler_from_matrix_doc[] =
+static char py_euler_from_matrix_doc[] =
     "Return Euler angles from rotation matrix for specified axis sequence.";
 
 static PyObject *
@@ -2325,7 +2521,7 @@ py_euler_from_matrix(
 {
     PyArrayObject *matrix = NULL;
     PyObject *axes = NULL;
-    int next_axis[] = {1, 2, 0, 1};
+    int next_axis[] = { 1, 2, 0, 1 };
     double ai = 0.0;
     double aj = 0.0;
     double ak = 0.0;
@@ -2333,10 +2529,19 @@ py_euler_from_matrix(
     int parity = 0;
     int repetition = 0;
     int frame = 0;
-    static char *kwlist[] = {"matrix", "axes", NULL};
+    static char *kwlist[] = { "matrix", "axes", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&|O", kwlist,
-        PyConverter_DoubleMatrix44, &matrix, &axes)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&|O",
+        kwlist,
+        PyConverter_DoubleMatrix44,
+        &matrix,
+        &axes
+        ))
+        goto _fail;
 
     if (axes != NULL)
         Py_INCREF(axes);
@@ -2347,33 +2552,36 @@ py_euler_from_matrix(
     {
         double *M = (double *)PyArray_DATA(matrix);
         int i = firstaxis;
-        int j = next_axis[i+parity];
-        int k = next_axis[i-parity+1];
+        int j = next_axis[i + parity];
+        int k = next_axis[i - parity + 1];
         double x, y, t;
 
         if (repetition) {
-            x = M[4*i+j];
-            y = M[4*i+k];
-            t = sqrt(x*x + y*y);
+            x = M[4 * i + j];
+            y = M[4 * i + k];
+            t = sqrt(x * x + y * y);
             if (t > EPSILON) {
-                ai = atan2( M[4*i+j],  M[4*i+k]);
-                aj = atan2( t,         M[4*i+i]);
-                ak = atan2( M[4*j+i], -M[4*k+i]);
-            } else {
-                ai = atan2(-M[4*j+k],  M[4*j+j]);
-                aj = atan2( t,         M[4*i+i]);
+                ai = atan2(M[4 * i + j],  M[4 * i + k]);
+                aj = atan2(t,         M[4 * i + i]);
+                ak = atan2(M[4 * j + i], -M[4 * k + i]);
             }
-        } else {
-            x = M[4*i+i];
-            y = M[4*j+i];
-            t = sqrt(x*x + y*y);
+            else {
+                ai = atan2(-M[4 * j + k],  M[4 * j + j]);
+                aj = atan2(t,         M[4 * i + i]);
+            }
+        }
+        else {
+            x = M[4 * i + i];
+            y = M[4 * j + i];
+            t = sqrt(x * x + y * y);
             if (t > EPSILON) {
-                ai = atan2( M[4*k+j],  M[4*k+k]);
-                aj = atan2(-M[4*k+i],  t);
-                ak = atan2( M[4*j+i],  M[4*i+i]);
-            } else {
-                ai = atan2(-M[4*j+k],  M[4*j+j]);
-                aj = atan2(-M[4*k+i],  t);
+                ai = atan2(M[4 * k + j],  M[4 * k + k]);
+                aj = atan2(-M[4 * k + i],  t);
+                ak = atan2(M[4 * j + i],  M[4 * i + i]);
+            }
+            else {
+                ai = atan2(-M[4 * j + k],  M[4 * j + j]);
+                aj = atan2(-M[4 * k + i],  t);
             }
         }
         if (parity) {
@@ -2392,16 +2600,16 @@ py_euler_from_matrix(
     Py_DECREF(matrix);
     return Py_BuildValue("(d,d,d)", ai, aj, ak);
 
-  _fail:
+_fail:
     Py_XDECREF(axes);
-    Py_XDECREF(matrix);
+    Py_XDECREF((PyObject *)(matrix));
     return NULL;
 }
 
 /*
 Quaternion from Euler angles.
 */
-char py_quaternion_from_euler_doc[] =
+static char py_quaternion_from_euler_doc[] =
     "Return quaternion from Euler angles and axis sequence.";
 
 static PyObject *
@@ -2413,16 +2621,26 @@ py_quaternion_from_euler(
     PyArrayObject *result = NULL;
     PyObject *axes = NULL;
     Py_ssize_t dims = 4;
-    int next_axis[] = {1, 2, 0, 1};
+    int next_axis[] = { 1, 2, 0, 1 };
     double ai, aj, ak;
     int firstaxis = 0;
     int parity = 0;
     int repetition = 0;
     int frame = 0;
-    static char *kwlist[] = {"ai", "aj", "ak", "axes", NULL};
+    static char *kwlist[] = { "ai", "aj", "ak", "axes", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "ddd|O", kwlist,
-        &ai, &aj, &ak, &axes)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "ddd|O",
+        kwlist,
+        &ai,
+        &aj,
+        &ak,
+        &axes
+        ))
+        goto _fail;
 
     Py_XINCREF(axes);
 
@@ -2438,8 +2656,8 @@ py_quaternion_from_euler(
     {
         double *q = (double *)PyArray_DATA(result);
         int i = firstaxis + 1;
-        int j = next_axis[i+parity-1] + 1;
-        int k = next_axis[i-parity] + 1;
+        int j = next_axis[i + parity - 1] + 1;
+        int k = next_axis[i - parity] + 1;
         double t;
         double si, sj, sk, ci, cj, ck, cc, cs, sc, ss;
 
@@ -2463,21 +2681,22 @@ py_quaternion_from_euler(
         ci = cos(ai);
         cj = cos(aj);
         ck = cos(ak);
-        cc = ci*ck;
-        cs = ci*sk;
-        sc = si*ck;
-        ss = si*sk;
+        cc = ci * ck;
+        cs = ci * sk;
+        sc = si * ck;
+        ss = si * sk;
 
         if (repetition) {
-            q[i] = cj*(cs + sc);
-            q[k] = sj*(cs - sc);
-            q[j] = sj*(cc + ss);
-            q[0] = cj*(cc - ss);
-        } else {
-            q[i] = cj*sc - sj*cs;
-            q[k] = cj*cs - sj*sc;
-            q[j] = cj*ss + sj*cc;
-            q[0] = cj*cc + sj*ss;
+            q[i] = cj * (cs + sc);
+            q[k] = sj * (cs - sc);
+            q[j] = sj * (cc + ss);
+            q[0] = cj * (cc - ss);
+        }
+        else {
+            q[i] = cj * sc - sj * cs;
+            q[k] = cj * cs - sj * sc;
+            q[j] = cj * ss + sj * cc;
+            q[0] = cj * cc + sj * ss;
         }
 
         if (parity) {
@@ -2488,16 +2707,16 @@ py_quaternion_from_euler(
     Py_XDECREF(axes);
     return PyArray_Return(result);
 
-  _fail:
+_fail:
     Py_XDECREF(axes);
-    Py_XDECREF(result);
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Quaternion about axis.
 */
-char py_quaternion_about_axis_doc[] =
+static char py_quaternion_about_axis_doc[] =
     "Return quaternion for rotation about axis.";
 
 static PyObject *
@@ -2510,11 +2729,19 @@ py_quaternion_about_axis(
     PyArrayObject *result = NULL;
     double angle;
     Py_ssize_t dims = 4;
-    static char *kwlist[] = {"angle", "axis", NULL};
+    static char *kwlist[] = { "angle", "axis", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "dO&", kwlist,
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "dO&",
+        kwlist,
         &angle,
-        PyConverter_DoubleVector3, &axis)) goto _fail;
+        PyConverter_DoubleVector3,
+        &axis
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(1, &dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -2524,14 +2751,15 @@ py_quaternion_about_axis(
     {
         double *q = (double *)PyArray_DATA(result);
         double *a = (double *)PyArray_DATA(axis);
-        double t = sqrt(a[0]*a[0] + a[1]*a[1] + a[2]*a[2]);
+        double t = sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
 
         if (t > EPSILON) {
             t = sin(angle / 2.0) / t;
             q[1] = a[0] * t;
             q[2] = a[1] * t;
             q[3] = a[2] * t;
-        } else {
+        }
+        else {
             q[1] = a[0];
             q[2] = a[1];
             q[3] = a[2];
@@ -2542,16 +2770,16 @@ py_quaternion_about_axis(
     Py_DECREF(axis);
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(result);
-    Py_XDECREF(axis);
+_fail:
+    Py_XDECREF((PyObject *)(result));
+    Py_XDECREF((PyObject *)(axis));
     return NULL;
 }
 
 /*
 Quaternion from rotation matrix.
 */
-char py_quaternion_from_matrix_doc[] =
+static char py_quaternion_from_matrix_doc[] =
     "Return quaternion from rotation matrix.";
 
 static PyObject *
@@ -2565,12 +2793,21 @@ py_quaternion_from_matrix(
     PyArrayObject *result = NULL;
     PyObject *boolobj = NULL;
     Py_ssize_t dims = 4;
-    static char *kwlist[] = {"matrix", "isprecise", NULL};
+    static char *kwlist[] = { "matrix", "isprecise", NULL };
     double *buffer = NULL;
     int isprecise = 0;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&|O", kwlist,
-        PyConverter_DoubleMatrix44, &matrix, &boolobj)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&|$O",
+        kwlist,
+        PyConverter_DoubleMatrix44,
+        &matrix,
+        &boolobj
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(1, &dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -2586,12 +2823,14 @@ py_quaternion_from_matrix(
         double *q = (double *)PyArray_DATA(result);
         double *M = (double *)PyArray_DATA(matrix);
         if (quaternion_from_matrix(M, q) != 0) {
-            PyEval_RestoreThread(_save);
-            PyErr_Format(PyExc_ValueError,
-                "quaternion_from_matrix() failed");
+            PyErr_Format(
+                PyExc_ValueError,
+                "quaternion_from_matrix() failed"
+            );
             goto _fail;
         }
-    } else {
+    }
+    else {
         double *q = (double *)PyArray_DATA(result);
         double *M = (double *)PyArray_DATA(matrix);
         double *K, *N, *a, *b, *t;
@@ -2631,8 +2870,10 @@ py_quaternion_from_matrix(
 
         if (tridiagonalize_symmetric_44(N, a, b) != 0) {
             PyEval_RestoreThread(_save);
-            PyErr_Format(PyExc_ValueError,
-                "tridiagonalize_symmetric_44() failed");
+            PyErr_Format(
+                PyExc_ValueError,
+                "tridiagonalize_symmetric_44() failed"
+            );
             goto _fail;
         }
 
@@ -2644,8 +2885,10 @@ py_quaternion_from_matrix(
 
         if (eigenvector_of_symmetric_44(K, q, t) != 0) {
             PyEval_RestoreThread(_save);
-            PyErr_Format(PyExc_ValueError,
-                "eigenvector_of_symmetric_44() failed");
+            PyErr_Format(
+                PyExc_ValueError,
+                "eigenvector_of_symmetric_44() failed"
+            );
             goto _fail;
         }
 
@@ -2669,17 +2912,17 @@ py_quaternion_from_matrix(
     Py_DECREF(matrix);
     return PyArray_Return(result);
 
-  _fail:
+_fail:
     PyMem_Free(buffer);
-    Py_XDECREF(result);
-    Py_XDECREF(matrix);
+    Py_XDECREF((PyObject *)(result));
+    Py_XDECREF((PyObject *)(matrix));
     return NULL;
 }
 
 /*
 Rotation matrix from quaternion.
 */
-char py_quaternion_matrix_doc[] =
+static char py_quaternion_matrix_doc[] =
     "Return rotation matrix from quaternion.";
 
 static PyObject *
@@ -2690,11 +2933,19 @@ py_quaternion_matrix(
 {
     PyArrayObject *quaternion = NULL;
     PyArrayObject *result = NULL;
-    Py_ssize_t dims[] = {4, 4};
-    static char *kwlist[] = {"quaternion" , NULL};
+    Py_ssize_t dims[] = { 4, 4 };
+    static char *kwlist[] = { "quaternion", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&", kwlist,
-        PyConverter_DoubleVector4, &quaternion)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&",
+        kwlist,
+        PyConverter_DoubleVector4,
+        &quaternion
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -2702,8 +2953,12 @@ py_quaternion_matrix(
         goto _fail;
     }
 
-    if (quaternion_matrix((double *)PyArray_DATA(quaternion),
-                          (double *)PyArray_DATA(result)) != 0) {
+    if (
+        quaternion_matrix(
+        (double *)PyArray_DATA(quaternion),
+        (double *)PyArray_DATA(result)
+        ) != 0)
+    {
         PyErr_Format(PyExc_ValueError, "quaternion_matrix failed");
         goto _fail;
     }
@@ -2711,16 +2966,16 @@ py_quaternion_matrix(
     Py_DECREF(quaternion);
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(result);
-    Py_XDECREF(quaternion);
+_fail:
+    Py_XDECREF((PyObject *)(result));
+    Py_XDECREF((PyObject *)(quaternion));
     return NULL;
 }
 
 /*
 Multiply two quaternions.
 */
-char py_quaternion_multiply_doc[] = "Multiply two quaternions.";
+static char py_quaternion_multiply_doc[] = "Multiply two quaternions.";
 
 static PyObject *
 py_quaternion_multiply(
@@ -2732,11 +2987,20 @@ py_quaternion_multiply(
     PyArrayObject *quaternion1 = NULL;
     PyArrayObject *result = NULL;
     Py_ssize_t dims = 4;
-    static char *kwlist[] = {"quaternion1", "quaternion0", NULL};
+    static char *kwlist[] = { "quaternion1", "quaternion0", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&O&", kwlist,
-        PyConverter_DoubleVector4, &quaternion1,
-        PyConverter_DoubleVector4, &quaternion0)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&O&",
+        kwlist,
+        PyConverter_DoubleVector4,
+        &quaternion1,
+        PyConverter_DoubleVector4,
+        &quaternion0
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(1, &dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -2747,27 +3011,27 @@ py_quaternion_multiply(
         double *q0 = (double *)PyArray_DATA(quaternion0);
         double *q1 = (double *)PyArray_DATA(quaternion1);
         double *qq = (double *)PyArray_DATA(result);
-        qq[0] = -q1[1]*q0[1] - q1[2]*q0[2] - q1[3]*q0[3] + q1[0]*q0[0];
-        qq[1] =  q1[1]*q0[0] + q1[2]*q0[3] - q1[3]*q0[2] + q1[0]*q0[1];
-        qq[2] = -q1[1]*q0[3] + q1[2]*q0[0] + q1[3]*q0[1] + q1[0]*q0[2];
-        qq[3] =  q1[1]*q0[2] - q1[2]*q0[1] + q1[3]*q0[0] + q1[0]*q0[3];
+        qq[0] = -q1[1] * q0[1] - q1[2] * q0[2] - q1[3] * q0[3] + q1[0] * q0[0];
+        qq[1] =  q1[1] * q0[0] + q1[2] * q0[3] - q1[3] * q0[2] + q1[0] * q0[1];
+        qq[2] = -q1[1] * q0[3] + q1[2] * q0[0] + q1[3] * q0[1] + q1[0] * q0[2];
+        qq[3] =  q1[1] * q0[2] - q1[2] * q0[1] + q1[3] * q0[0] + q1[0] * q0[3];
     }
 
     Py_DECREF(quaternion0);
     Py_DECREF(quaternion1);
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(result);
-    Py_XDECREF(quaternion0);
-    Py_XDECREF(quaternion1);
+_fail:
+    Py_XDECREF((PyObject *)(result));
+    Py_XDECREF((PyObject *)(quaternion0));
+    Py_XDECREF((PyObject *)(quaternion1));
     return NULL;
 }
 
 /*
 Quaternion conjugate.
 */
-char py_quaternion_conjugate_doc[] = "Return conjugate of quaternion.";
+static char py_quaternion_conjugate_doc[] = "Return conjugate of quaternion.";
 
 static PyObject *
 py_quaternion_conjugate(
@@ -2778,10 +3042,18 @@ py_quaternion_conjugate(
     PyArrayObject *quaternion = NULL;
     PyArrayObject *result = NULL;
     Py_ssize_t dims = 4;
-    static char *kwlist[] = {"quaternion", NULL};
+    static char *kwlist[] = { "quaternion", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&", kwlist,
-        PyConverter_DoubleVector4, &quaternion)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&",
+        kwlist,
+        PyConverter_DoubleVector4,
+        &quaternion
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(1, &dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -2800,16 +3072,16 @@ py_quaternion_conjugate(
     Py_DECREF(quaternion);
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(result);
-    Py_XDECREF(quaternion);
+_fail:
+    Py_XDECREF((PyObject *)(result));
+    Py_XDECREF((PyObject *)(quaternion));
     return NULL;
 }
 
 /*
 Quaternion inverse.
 */
-char py_quaternion_inverse_doc[] = "Return inverse of quaternion.";
+static char py_quaternion_inverse_doc[] = "Return inverse of quaternion.";
 
 static PyObject *
 py_quaternion_inverse(
@@ -2820,10 +3092,18 @@ py_quaternion_inverse(
     PyArrayObject *quaternion = NULL;
     PyArrayObject *result = NULL;
     Py_ssize_t dims = 4;
-    static char *kwlist[] = {"quaternion", NULL};
+    static char *kwlist[] = { "quaternion", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&", kwlist,
-        PyConverter_DoubleVector4, &quaternion)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&",
+        kwlist,
+        PyConverter_DoubleVector4,
+        &quaternion
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(1, &dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -2833,7 +3113,7 @@ py_quaternion_inverse(
     {
         double *r = (double *)PyArray_DATA(result);
         double *q = (double *)PyArray_DATA(quaternion);
-        double n = q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3];
+        double n = q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3];
 
         if (n < EPSILON) {
             PyErr_Format(PyExc_ValueError, "not a valid quaternion");
@@ -2849,16 +3129,16 @@ py_quaternion_inverse(
     Py_DECREF(quaternion);
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(result);
-    Py_XDECREF(quaternion);
+_fail:
+    Py_XDECREF((PyObject *)(result));
+    Py_XDECREF((PyObject *)(quaternion));
     return NULL;
 }
 
 /*
 Quaternion spherical linear interpolation.
 */
-char py_quaternion_slerp_doc[] =
+static char py_quaternion_slerp_doc[] =
     "Return spherical linear interpolation between two quaternions.";
 
 static PyObject *
@@ -2875,13 +3155,24 @@ py_quaternion_slerp(
     int shortestpath = 1;
     int spin = 0;
     double fraction = 0.0;
-    static char *kwlist[] = {"quat0", "quat1", "fraction",
-                             "spin", "shortestpath", NULL};
+    static char *kwlist[] = { "quat0", "quat1", "fraction",
+                              "spin", "shortestpath", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&O&d|iO", kwlist,
-        PyConverter_DoubleVector4, &quaternion0,
-        PyConverter_DoubleVector4, &quaternion1,
-        &fraction, &spin, &boolobj)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&O&d|i$O",
+        kwlist,
+        PyConverter_DoubleVector4,
+        &quaternion0,
+        PyConverter_DoubleVector4,
+        &quaternion1,
+        &fraction,
+        &spin,
+        &boolobj
+        ))
+        goto _fail;
 
     if (boolobj != NULL)
         shortestpath = PyObject_IsTrue(boolobj);
@@ -2897,7 +3188,10 @@ py_quaternion_slerp(
         double *q1 = (double *)PyArray_DATA(quaternion1);
         double n;
 
-        n = sqrt(q0[0]*q0[0] + q0[1]*q0[1] + q0[2]*q0[2] + q0[3]*q0[3]);
+        n = sqrt(
+            q0[0] * q0[0] + q0[1] * q0[1] + q0[2] * q0[2] + q0[3] *
+            q0[3]
+        );
         if (n < EPSILON) {
             PyErr_Format(PyExc_ValueError, "quaternion0 not valid");
             goto _fail;
@@ -2907,7 +3201,10 @@ py_quaternion_slerp(
         q[2] = q0[2] / n;
         q[3] = q0[3] / n;
 
-        n = sqrt(q1[0]*q1[0] + q1[1]*q1[1] + q1[2]*q1[2] + q1[3]*q1[3]);
+        n = sqrt(
+            q1[0] * q1[0] + q1[1] * q1[1] + q1[2] * q1[2] + q1[3] *
+            q1[3]
+        );
         if (n < EPSILON) {
             PyErr_Format(PyExc_ValueError, "quaternion1 not valid");
             goto _fail;
@@ -2918,9 +3215,11 @@ py_quaternion_slerp(
             q[1] = q1[1] / n;
             q[2] = q1[2] / n;
             q[3] = q1[3] / n;
-        } else if (NOTZERO(fraction)) {
+        }
+        else if (NOTZERO(fraction)) {
             int flip = 0;
-            double a = (q[0]*q1[0] + q[1]*q1[1] + q[2]*q1[2] + q[3]*q1[3]) / n;
+            double a = (q[0] * q1[0] + q[1] * q1[1] + q[2] * q1[2] + q[3] *
+                q1[3]) / n;
             if (fabs(fabs(a) - 1.0) > EPSILON) {
                 if (shortestpath && (a < 0.0)) {
                     a = -a;
@@ -2945,17 +3244,17 @@ py_quaternion_slerp(
     Py_DECREF(quaternion1);
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(result);
-    Py_DECREF(quaternion0);
-    Py_DECREF(quaternion1);
+_fail:
+    Py_XDECREF((PyObject *)(result));
+    Py_XDECREF((PyObject *)(quaternion0));
+    Py_XDECREF((PyObject *)(quaternion1));
     return NULL;
 }
 
 /*
 Random quaternion.
 */
-char py_random_quaternion_doc[] =
+static char py_random_quaternion_doc[] =
     "Return uniform random unit quaternion.";
 
 static PyObject *
@@ -2967,10 +3266,18 @@ py_random_quaternion(
     PyArrayObject *result = NULL;
     PyArrayObject *arand = NULL;
     Py_ssize_t dims = 4;
-    static char *kwlist[] = {"rand", NULL};
+    static char *kwlist[] = { "rand", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|O&", kwlist,
-        PyConverter_DoubleVector3OrNone, &arand)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "|O&",
+        kwlist,
+        PyConverter_DoubleVector3OrNone,
+        &arand
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(1, &dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -2990,7 +3297,8 @@ py_random_quaternion(
             r0 = r[0];
             r1 = r[1];
             r2 = r[2];
-        } else {
+        }
+        else {
             double *r = (double *)PyArray_DATA(arand);
             r0 = r[0];
             r1 = r[1];
@@ -3006,19 +3314,19 @@ py_random_quaternion(
         q[0] = cos(t) * r2;
     }
 
-    Py_XDECREF(arand);
+    Py_XDECREF((PyObject *)(arand));
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(arand);
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(arand));
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Random rotation matrix.
 */
-char py_random_rotation_matrix_doc[] =
+static char py_random_rotation_matrix_doc[] =
     "Return uniform random rotation matrix.";
 
 static PyObject *
@@ -3029,11 +3337,19 @@ py_random_rotation_matrix(
 {
     PyArrayObject *result = NULL;
     PyArrayObject *arand = NULL;
-    Py_ssize_t dims[] = {4, 4};
-    static char *kwlist[] = {"rand", NULL};
+    Py_ssize_t dims[] = { 4, 4 };
+    static char *kwlist[] = { "rand", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|O&", kwlist,
-        PyConverter_DoubleVector3OrNone, &arand)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "|O&",
+        kwlist,
+        PyConverter_DoubleVector3OrNone,
+        &arand
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -3053,7 +3369,8 @@ py_random_rotation_matrix(
             r0 = r[0];
             r1 = r[1];
             r2 = r[2];
-        } else {
+        }
+        else {
             double *r = (double *)PyArray_DATA(arand);
             r0 = r[0];
             r1 = r[1];
@@ -3069,29 +3386,29 @@ py_random_rotation_matrix(
         qw = cos(t) * r2;
 
         {
-            double x2 = qx+qx;
-            double y2 = qy+qy;
-            double z2 = qz+qz;
+            double x2 = qx + qx;
+            double y2 = qy + qy;
+            double z2 = qz + qz;
             {
-                double xx2 = qx*x2;
-                double yy2 = qy*y2;
-                double zz2 = qz*z2;
+                double xx2 = qx * x2;
+                double yy2 = qy * y2;
+                double zz2 = qz * z2;
                 M[0]  = 1.0 - yy2 - zz2;
                 M[5]  = 1.0 - xx2 - zz2;
                 M[10] = 1.0 - xx2 - yy2;
-            }{
-                double yz2 = qy*z2;
-                double wx2 = qw*x2;
+            } {
+                double yz2 = qy * z2;
+                double wx2 = qw * x2;
                 M[6] = yz2 - wx2;
                 M[9] = yz2 + wx2;
-            }{
-                double xy2 = qx*y2;
-                double wz2 = qw*z2;
+            } {
+                double xy2 = qx * y2;
+                double wz2 = qw * z2;
                 M[1] = xy2 - wz2;
                 M[4] = xy2 + wz2;
-            }{
-                double xz2 = qx*z2;
-                double wy2 = qw*y2;
+            } {
+                double xz2 = qx * z2;
+                double wy2 = qw * y2;
                 M[8] = xz2 - wy2;
                 M[2] = xz2 + wy2;
             }
@@ -3100,12 +3417,12 @@ py_random_rotation_matrix(
         }
     }
 
-    Py_XDECREF(arand);
+    Py_XDECREF((PyObject *)(arand));
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(arand);
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(arand));
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
@@ -3113,7 +3430,7 @@ py_random_rotation_matrix(
 Matrix inversion.
 Significantly faster than numpy.linalg.inv() for small sizes.
 */
-char py_inverse_matrix_doc[] = "Return inverse of symmetric matrix.";
+static char py_inverse_matrix_doc[] = "Return inverse of symmetric matrix.";
 
 static PyObject *
 py_inverse_matrix(
@@ -3126,14 +3443,17 @@ py_inverse_matrix(
     PyArrayObject *matrix = NULL;
     Py_ssize_t dims[2];
     Py_ssize_t size = 0;
-    static char *kwlist[] = {"matrix", NULL};
+    static char *kwlist[] = { "matrix", NULL };
     int iscopy = 0;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O", kwlist, &object))
         goto _fail;
 
-    matrix = (PyArrayObject *)PyArray_FROM_OTF(object, NPY_DOUBLE,
-                                               NPY_ARRAY_IN_ARRAY);
+    matrix = (PyArrayObject *)PyArray_FROM_OTF(
+        object,
+        NPY_DOUBLE,
+        NPY_ARRAY_IN_ARRAY
+    );
     if (matrix == NULL) {
         PyErr_Format(PyExc_ValueError, "not an array");
         goto _fail;
@@ -3142,7 +3462,7 @@ py_inverse_matrix(
 
     size = PyArray_DIM(matrix, 0);
     if ((size != PyArray_DIM(matrix, 1)) || (size < 1)) {
-        PyErr_Format(PyExc_ValueError, "not a symmetric matrix");
+        PyErr_Format(PyExc_ValueError, "not a square matrix");
         goto _fail;
     }
 
@@ -3157,7 +3477,8 @@ py_inverse_matrix(
         double *M = (double *)PyArray_DATA(matrix);
         double *Minv = (double *)PyArray_DATA(result);
 
-        switch (size) {
+        switch (size)
+        {
             case 4:
                 error = invert_matrix44(M, Minv);
                 break;
@@ -3175,46 +3496,55 @@ py_inverse_matrix(
             default: {
                 void *buffer;
                 if (iscopy)
-                    buffer = PyMem_Malloc(size*2*sizeof(Py_ssize_t));
+                    buffer = PyMem_Malloc(size * 2 * sizeof(Py_ssize_t));
                 else
-                    buffer = PyMem_Malloc(size*2*sizeof(Py_ssize_t) +
-                                          size*size*sizeof(double));
+                    buffer = PyMem_Malloc(
+                        size * 2 * sizeof(Py_ssize_t) +
+                        size * size * sizeof(double)
+                    );
                 if (buffer == NULL) {
-                    PyErr_Format(PyExc_MemoryError,
-                        "unable to allocate buffer");
+                    PyErr_Format(
+                        PyExc_MemoryError,
+                        "unable to allocate buffer"
+                    );
                     goto _fail;
                 }
                 if (!iscopy) {
-                    M = (double *)((Py_ssize_t *)buffer + 2*size);
-                    memcpy(M, (double *)PyArray_DATA(matrix),
-                           size*size*sizeof(double));
+                    M = (double *)((Py_ssize_t *)buffer + 2 * size);
+                    memcpy(
+                        M,
+                        (double *)PyArray_DATA(matrix),
+                        size * size * sizeof(double)
+                    );
                 }
                 Py_BEGIN_ALLOW_THREADS
-                error = invert_matrix(size, M, Minv, (Py_ssize_t *)buffer);
+                    error = invert_matrix(size, M, Minv, (Py_ssize_t *)buffer);
                 Py_END_ALLOW_THREADS
-                PyMem_Free(buffer);
+                PyMem_Free(
+                    buffer
+                );
             }
         }
 
         if (error != 0) {
-            PyErr_Format(PyExc_ValueError, "non-singular matrix");
+            PyErr_Format(PyExc_ValueError, "singular matrix");
             goto _fail;
         }
     }
 
-    Py_XDECREF(matrix);
+    Py_XDECREF((PyObject *)(matrix));
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(matrix);
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(matrix));
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Arcball: map window to sphere coordinates.
 */
-char py_arcball_map_to_sphere_doc[] =
+static char py_arcball_map_to_sphere_doc[] =
     "Return unit sphere coordinates from window coordinates.";
 
 static PyObject *
@@ -3227,13 +3557,22 @@ py_arcball_map_to_sphere(
     PyObject *center = NULL;
     PyArrayObject *result = NULL;
     Py_ssize_t dims = 3;
-    double p[] = {0.0, 0.0};
-    double c[] = {0.0, 0.0};
+    double p[] = { 0.0, 0.0 };
+    double c[] = { 0.0, 0.0 };
     double radius;
-    static char *kwlist[] = {"point", "center", "radius", NULL};
+    static char *kwlist[] = { "point", "center", "radius", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "OOd", kwlist,
-        &point, &center, &radius)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "OOd",
+        kwlist,
+        &point,
+        &center,
+        &radius
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(1, &dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -3246,14 +3585,21 @@ py_arcball_map_to_sphere(
         o = PySequence_GetItem(point, 0);
         if (o != NULL) {
             p[0] = PyFloat_AsDouble(o);
+            if (PyErr_Occurred()) {
+                Py_DECREF(o); goto _fail;
+            }
         }
         Py_XDECREF(o);
         o = PySequence_GetItem(point, 1);
         if (o != NULL) {
             p[1] = PyFloat_AsDouble(o);
+            if (PyErr_Occurred()) {
+                Py_DECREF(o); goto _fail;
+            }
         }
         Py_XDECREF(o);
-    } else {
+    }
+    else {
         PyErr_Format(PyExc_ValueError, "invalid point");
         goto _fail;
     }
@@ -3263,14 +3609,21 @@ py_arcball_map_to_sphere(
         o = PySequence_GetItem(center, 0);
         if (o != NULL) {
             c[0] = PyFloat_AsDouble(o);
+            if (PyErr_Occurred()) {
+                Py_DECREF(o); goto _fail;
+            }
         }
         Py_XDECREF(o);
         o = PySequence_GetItem(center, 1);
         if (o != NULL) {
             c[1] = PyFloat_AsDouble(o);
+            if (PyErr_Occurred()) {
+                Py_DECREF(o); goto _fail;
+            }
         }
         Py_XDECREF(o);
-    } else {
+    }
+    else {
         PyErr_Format(PyExc_ValueError, "invalid center");
         goto _fail;
     }
@@ -3281,29 +3634,30 @@ py_arcball_map_to_sphere(
         v[0] = (p[0] - c[0]) / radius;
         v[1] = (c[1] - p[1]) / radius;
 
-        n = v[0]*v[0] + v[1]*v[1];
+        n = v[0] * v[0] + v[1] * v[1];
 
         if (n > 1.0) {
             n = sqrt(n);
             v[0] /= n;
             v[1] /= n;
             v[2] = 0.0;
-        } else {
+        }
+        else {
             v[2] = sqrt(1.0 - n);
         }
     }
 
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Arcball: constrain point to axis.
 */
-char py_arcball_constrain_to_axis_doc[] =
+static char py_arcball_constrain_to_axis_doc[] =
     "Return sphere point perpendicular to axis.";
 
 static PyObject *
@@ -3316,11 +3670,20 @@ py_arcball_constrain_to_axis(
     PyArrayObject *axis = NULL;
     PyArrayObject *result = NULL;
     Py_ssize_t dims = 3;
-    static char *kwlist[] = {"point", "axis", NULL};
+    static char *kwlist[] = { "point", "axis", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&O&", kwlist,
-        PyConverter_DoubleVector3, &point,
-        PyConverter_DoubleVector3, &axis)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&O&",
+        kwlist,
+        PyConverter_DoubleVector3,
+        &point,
+        PyConverter_DoubleVector3,
+        &axis
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(1, &dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -3331,24 +3694,26 @@ py_arcball_constrain_to_axis(
         double *v = (double *)PyArray_DATA(result);
         double *a = (double *)PyArray_DATA(axis);
         double *p = (double *)PyArray_DATA(point);
-        double n = p[0]*a[0] + p[1]*a[1] + p[2]*a[2];
+        double n = p[0] * a[0] + p[1] * a[1] + p[2] * a[2];
 
-        v[0] = p[0] - a[0]*n;
-        v[1] = p[1] - a[1]*n;
-        v[2] = p[2] - a[2]*n;
+        v[0] = p[0] - a[0] * n;
+        v[1] = p[1] - a[1] * n;
+        v[2] = p[2] - a[2] * n;
 
-        n = sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+        n = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
 
         if (n > EPSILON) {
             v[0] /= n;
             v[1] /= n;
             v[2] /= n;
-        } else if (a[2] == 1.0) {
+        }
+        else if (a[2] == 1.0) {
             v[0] = 1.0;
             v[1] = 0.0;
             v[2] = 0.0;
-        } else {
-            n = sqrt(a[0]*a[0] + a[1]*a[1]);
+        }
+        else {
+            n = sqrt(a[0] * a[0] + a[1] * a[1]);
             v[0] = -a[1] / n;
             v[1] = a[0] / n;
             v[2] = 0.0;
@@ -3359,17 +3724,17 @@ py_arcball_constrain_to_axis(
     Py_DECREF(point);
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(axis);
-    Py_XDECREF(point);
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(axis));
+    Py_XDECREF((PyObject *)(point));
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Vector length along axis of ndarray.
 */
-char py_vector_norm_doc[] =
+static char py_vector_norm_doc[] =
     "Return length, i.e. euclidean norm, of ndarray along axis.";
 
 static PyObject *
@@ -3386,32 +3751,47 @@ py_vector_norm(
     Py_ssize_t newshape[NPY_MAXDIMS];
     int axis = NPY_MAXDIMS;
 
-    static char *kwlist[] = {"data", "axis", "out", NULL};
+    static char *kwlist[] = { "data", "axis", "out", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&|O&O&", kwlist,
-        PyConverter_AnyDoubleArray, &data,
-        PyArray_AxisConverter, &axis,
-        PyOutputConverter_AnyDoubleArrayOrNone, &oout)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&|O&$O&",
+        kwlist,
+        PyConverter_AnyDoubleArray,
+        &data,
+        PyArray_AxisConverter,
+        &axis,
+        PyOutputConverter_AnyDoubleArrayOrNone,
+        &oout
+        ))
+        goto _fail;
 
-    if (axis == NPY_MAXDIMS ) {
+    if (axis == NPY_MAXDIMS) {
         /* iterate over all elements */
         double len = 0.0;
 
         if (oout != NULL) {
-            PyErr_Format(PyExc_ValueError,
-                "axis needs to be specified when output array is given");
+            PyErr_Format(
+                PyExc_ValueError,
+                "axis needs to be specified when output array is given"
+            );
             goto _fail;
         }
 
-        if ((PyArray_NDIM(data) == 1) &&
-            (PyArray_STRIDE(data, 0) == sizeof(double))) {
+        if (
+            (PyArray_NDIM(data) == 1) &&
+            (PyArray_STRIDE(data, 0) == sizeof(double)))
+        {
             Py_ssize_t i;
             double* dptr = PyArray_DATA(data);
             #pragma vector always
             for (i = 0; i < PyArray_DIM(data, 0); i++) {
                 len += dptr[i] * dptr[i];
             }
-        } else {
+        }
+        else {
             double t;
             dit = (PyArrayIterObject *) PyArray_IterNew((PyObject *)data);
             if (dit == NULL) {
@@ -3420,7 +3800,7 @@ py_vector_norm(
             }
             while (dit->index < dit->size) {
                 t = *((double *)dit->dataptr);
-                len += t*t;
+                len += t * t;
                 PyArray_ITER_NEXT(dit);
             }
             Py_DECREF(dit);
@@ -3430,7 +3810,8 @@ py_vector_norm(
         Py_DECREF(data);
         return PyFloat_FromDouble(len);
 
-    } else { /* iterate over elements of specified axis */
+    }
+    else {   /* iterate over elements of specified axis */
         Py_ssize_t dstride, s, size;
         int i, j;
         int n = PyArray_NDIM(data);
@@ -3452,17 +3833,23 @@ py_vector_norm(
 
         if (oout == NULL) {
             /* create a new output array */
-            out = (PyArrayObject*)PyArray_SimpleNew(n-1, newshape,
-                                                    NPY_DOUBLE);
+            out = (PyArrayObject*)PyArray_SimpleNew(
+                n - 1,
+                newshape,
+                NPY_DOUBLE
+            );
             if (out == NULL) {
                 PyErr_Format(PyExc_MemoryError, "failed to allocate array");
                 goto _fail;
             }
-        } else {
+        }
+        else {
             /* validate given output array */
-            if (PyArray_NDIM(data) != (PyArray_NDIM(oout)+1)) {
-                PyErr_Format(PyExc_ValueError,
-                    "size of output must match data");
+            if (PyArray_NDIM(data) != (PyArray_NDIM(oout) + 1)) {
+                PyErr_Format(
+                    PyExc_ValueError,
+                    "size of output must match data"
+                );
                 goto _fail;
             }
             j = 0;
@@ -3476,8 +3863,10 @@ py_vector_norm(
         }
 
         /* iterate data over all but specified axis */
-        dit = (PyArrayIterObject *) PyArray_IterAllButAxis((PyObject *)data,
-                                                           &axis);
+        dit = (PyArrayIterObject *) PyArray_IterAllButAxis(
+            (PyObject *)data,
+            &axis
+        );
         oit = (PyArrayIterObject *) PyArray_IterNew((PyObject *)out);
         dstride = PyArray_STRIDE(data, axis);
         size = PyArray_DIM(data, axis);
@@ -3490,13 +3879,14 @@ py_vector_norm(
                 len = 0.0;
                 #pragma vector always
                 for (s = 0; s < size; s++) {
-                    len += dptr[s]*dptr[s];
+                    len += dptr[s] * dptr[s];
                 }
                 *((double *)oit->dataptr) = sqrt(len);
                 PyArray_ITER_NEXT(oit);
                 PyArray_ITER_NEXT(dit);
             }
-        } else {
+        }
+        else {
             char *dptr;
             double t, len;
             while (dit->index < dit->size) {
@@ -3505,7 +3895,7 @@ py_vector_norm(
                 s = size;
                 while (s--) {
                     t = *((double*) dptr);
-                    len +=  t*t;
+                    len +=  t * t;
                     dptr += dstride;
                 }
                 *((double *)oit->dataptr) = sqrt(len);
@@ -3520,25 +3910,26 @@ py_vector_norm(
         /* Return output vector if not provided as argument */
         if (oout == NULL) {
             return PyArray_Return(out);
-        } else {
+        }
+        else {
             Py_DECREF(oout);
             Py_INCREF(Py_None);
             return Py_None;
         }
     }
 
-  _fail:
-    Py_XDECREF(oit);
-    Py_XDECREF(dit);
-    Py_XDECREF(data);
-    Py_XDECREF((oout == NULL) ? out : oout);
+_fail:
+    Py_XDECREF((PyObject *)(oit));
+    Py_XDECREF((PyObject *)(dit));
+    Py_XDECREF((PyObject *)(data));
+    Py_XDECREF((PyObject *)((oout == NULL) ? out : oout));
     return NULL;
 }
 
 /*
 Normalize ndarray by vector length along axis.
 */
-char py_unit_vector_doc[] =
+static char py_unit_vector_doc[] =
     "Return ndarray normalized by length, i.e. euclidean norm, along axis.";
 
 static PyObject *
@@ -3555,22 +3946,36 @@ py_unit_vector(
     Py_ssize_t dstride, ostride;
     int axis = NPY_MAXDIMS;
 
-    static char *kwlist[] = {"data", "axis", "out", NULL};
+    static char *kwlist[] = { "data", "axis", "out", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&|O&O&", kwlist,
-        PyConverter_AnyDoubleArray, &data,
-        PyArray_AxisConverter, &axis,
-        PyOutputConverter_AnyDoubleArrayOrNone, &oout)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&|O&$O&",
+        kwlist,
+        PyConverter_AnyDoubleArray,
+        &data,
+        PyArray_AxisConverter,
+        &axis,
+        PyOutputConverter_AnyDoubleArrayOrNone,
+        &oout
+        ))
+        goto _fail;
 
     if (oout == NULL) {
         /* create a new output array */
-        out = (PyArrayObject*)PyArray_SimpleNew(PyArray_NDIM(data),
-                                              PyArray_DIMS(data), NPY_DOUBLE);
+        out = (PyArrayObject*)PyArray_SimpleNew(
+            PyArray_NDIM(data),
+            PyArray_DIMS(data),
+            NPY_DOUBLE
+        );
         if (out == NULL) {
             PyErr_Format(PyExc_ValueError, "failed to create output array");
             goto _fail;
         }
-    } else {
+    }
+    else {
         /* check shape of provided output array */
         if (!PyArray_SAMESHAPE(data, oout)) {
             PyErr_Format(PyExc_ValueError, "shape of output must match data");
@@ -3581,9 +3986,11 @@ py_unit_vector(
 
     if (axis == NPY_MAXDIMS) {
         /* iterate over all elements */
-        if ((PyArray_NDIM(data) == 1) &&
+        if (
+            (PyArray_NDIM(data) == 1) &&
             (PyArray_STRIDE(data, 0) == sizeof(double)) &&
-            (PyArray_STRIDE(out, 0) == sizeof(double))) {
+            (PyArray_STRIDE(out, 0) == sizeof(double)))
+        {
 
             Py_ssize_t i, size = PyArray_DIM(data, 0);
             double *dptr = (double *)PyArray_DATA(data);
@@ -3592,28 +3999,49 @@ py_unit_vector(
 
             #pragma vector always
             for (i = 0; i < size; i++) {
-                len += dptr[i]*dptr[i];
+                len += dptr[i] * dptr[i];
             }
-            len = 1.0 / sqrt(len);
-            #pragma vector always
-            for (i = 0; i < size; i++) {
-                optr[i] = dptr[i] * len;
+            if (size > 0 && len < EPSILON * EPSILON) {
+                PyErr_Format(
+                    PyExc_ValueError,
+                    "zero-length vector cannot be normalized"
+                );
+                goto _fail;
             }
-        } else {
+            if (size > 0) {
+                len = 1.0 / sqrt(len);
+                #pragma vector always
+                for (i = 0; i < size; i++) {
+                    optr[i] = dptr[i] * len;
+                }
+            }
+        }
+        else {
             double t, len = 0.0;
             dit = (PyArrayIterObject *)PyArray_IterNew((PyObject *)data);
             oit = (PyArrayIterObject *)PyArray_IterNew((PyObject *)out);
             if (dit == NULL || oit == NULL) {
-                PyErr_Format(PyExc_ValueError,
-                    "failed to create iterator(s)");
+                PyErr_Format(
+                    PyExc_ValueError,
+                    "failed to create iterator(s)"
+                );
                 goto _fail;
             }
             while (dit->index < dit->size) {
                 t = *((double *)dit->dataptr);
-                len += t*t;
+                len += t * t;
                 PyArray_ITER_NEXT(dit);
             }
             Py_DECREF(dit);
+            if (PyArray_SIZE(data) > 0 && len < EPSILON * EPSILON) {
+                Py_DECREF(oit);
+                oit = NULL;
+                PyErr_Format(
+                    PyExc_ValueError,
+                    "zero-length vector cannot be normalized"
+                );
+                goto _fail;
+            }
             len = 1.0 / sqrt(len);
             dit = (PyArrayIterObject *) PyArray_IterNew((PyObject *)data);
             if (dit == NULL) {
@@ -3639,10 +4067,14 @@ py_unit_vector(
             goto _fail;
         }
 
-        dit = (PyArrayIterObject *) PyArray_IterAllButAxis((PyObject *)data,
-                                                           &axis);
-        oit = (PyArrayIterObject *) PyArray_IterAllButAxis((PyObject *)out,
-                                                           &axis);
+        dit = (PyArrayIterObject *) PyArray_IterAllButAxis(
+            (PyObject *)data,
+            &axis
+        );
+        oit = (PyArrayIterObject *) PyArray_IterAllButAxis(
+            (PyObject *)out,
+            &axis
+        );
         if (dit == NULL || oit == NULL) {
             PyErr_Format(PyExc_ValueError, "failed to create iterator(s)");
             goto _fail;
@@ -3661,7 +4093,7 @@ py_unit_vector(
                 dptr = (double *)dit->dataptr;
                 #pragma vector always
                 for (i = 0; i < size; i++) {
-                    len += dptr[i]*dptr[i];
+                    len += dptr[i] * dptr[i];
                 }
                 len = 1.0 / sqrt(len);
                 #pragma vector always
@@ -3671,7 +4103,8 @@ py_unit_vector(
                 PyArray_ITER_NEXT(oit);
                 PyArray_ITER_NEXT(dit);
             }
-        } else {
+        }
+        else {
             double t, len;
             char *optr, *dptr;
 
@@ -3681,7 +4114,7 @@ py_unit_vector(
                 s = size;
                 while (s--) {
                     t = *((double*) dptr);
-                    len += t*t;
+                    len += t * t;
                     dptr += dstride;
                 }
                 len = 1.0 / sqrt(len);
@@ -3699,31 +4132,32 @@ py_unit_vector(
         }
     }
 
-    Py_XDECREF(oit);
-    Py_XDECREF(dit);
+    Py_XDECREF((PyObject *)(oit));
+    Py_XDECREF((PyObject *)(dit));
     Py_DECREF(data);
 
     /* Return output vector if not provided as argument */
     if (oout == NULL) {
         return PyArray_Return(out);
-    } else {
+    }
+    else {
         Py_DECREF(oout);
         Py_INCREF(Py_None);
         return Py_None;
     }
 
-  _fail:
-    Py_XDECREF(oit);
-    Py_XDECREF(dit);
-    Py_XDECREF(data);
-    Py_XDECREF((oout == NULL) ? out : oout);
+_fail:
+    Py_XDECREF((PyObject *)(oit));
+    Py_XDECREF((PyObject *)(dit));
+    Py_XDECREF((PyObject *)(data));
+    Py_XDECREF((PyObject *)((oout == NULL) ? out : oout));
     return NULL;
 }
 
 /*
 Random vector.
 */
-char py_random_vector_doc[] =
+static char py_random_vector_doc[] =
     "Return array of random doubles in half-open interval [0.0, 1.0).";
 
 static PyObject *
@@ -3734,8 +4168,8 @@ py_random_vector(
 {
     PyArrayObject *result = NULL;
     Py_ssize_t size = 0;
-    int error ;
-    static char *kwlist[] = {"size", NULL};
+    int error;
+    static char *kwlist[] = { "size", NULL };
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "n", kwlist, &size))
         goto _fail;
@@ -3747,7 +4181,7 @@ py_random_vector(
     }
 
     Py_BEGIN_ALLOW_THREADS
-    error = random_doubles((double *)PyArray_DATA(result), size);
+        error = random_doubles((double *)PyArray_DATA(result), size);
     Py_END_ALLOW_THREADS
 
     if (error != 0) {
@@ -3757,15 +4191,15 @@ py_random_vector(
 
     return PyArray_Return(result);
 
-  _fail:
-    Py_XDECREF(result);
+_fail:
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
 /*
 Tridiagonal matrix.
 */
-char py_tridiagonalize_symmetric_44_doc[] =
+static char py_tridiagonalize_symmetric_44_doc[] =
     "Turn symmetric 4x4 matrix into tridiagonal matrix.";
 
 static PyObject *
@@ -3779,10 +4213,18 @@ py_tridiagonalize_symmetric_44(
     PyArrayObject *subdiagonal = NULL;
     Py_ssize_t dims = 4;
     int error;
-    static char *kwlist[] = {"matrix", NULL};
+    static char *kwlist[] = { "matrix", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&", kwlist,
-        PyConverter_DoubleMatrix44Copy, &matrix)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&",
+        kwlist,
+        PyConverter_DoubleMatrix44Copy,
+        &matrix
+        ))
+        goto _fail;
 
     diagonal = (PyArrayObject*)PyArray_SimpleNew(1, &dims, NPY_DOUBLE);
     if (diagonal == NULL) {
@@ -3798,32 +4240,35 @@ py_tridiagonalize_symmetric_44(
     }
 
     Py_BEGIN_ALLOW_THREADS
-    error = tridiagonalize_symmetric_44(
+        error = tridiagonalize_symmetric_44(
         (double *)PyArray_DATA(matrix),
         (double *)PyArray_DATA(diagonal),
-        (double *)PyArray_DATA(subdiagonal));
+        (double *)PyArray_DATA(subdiagonal)
+        );
     Py_END_ALLOW_THREADS
 
     if (error != 0) {
-        PyErr_Format(PyExc_ValueError,
-            "tridiagonalize_symmetric_44() failed");
+        PyErr_Format(
+            PyExc_ValueError,
+            "tridiagonalize_symmetric_44() failed"
+        );
         goto _fail;
     }
 
     Py_DECREF(matrix);
     return Py_BuildValue("(N,N)", diagonal, subdiagonal);
 
-  _fail:
-    Py_XDECREF(matrix);
-    Py_XDECREF(diagonal);
-    Py_XDECREF(subdiagonal);
+_fail:
+    Py_XDECREF((PyObject *)(matrix));
+    Py_XDECREF((PyObject *)(diagonal));
+    Py_XDECREF((PyObject *)(subdiagonal));
     return NULL;
 }
 
 /*
 Eigenvalue of tridiagonal matrix.
 */
-char py_max_eigenvalue_of_tridiag_44_doc[] =
+static char py_max_eigenvalue_of_tridiag_44_doc[] =
     "Return largest eigenvalue of symmetric tridiagonal 4x4 matrix.";
 
 static PyObject *
@@ -3835,30 +4280,40 @@ py_max_eigenvalue_of_tridiag_44(
     PyArrayObject *diagonal = NULL;
     PyArrayObject *subdiagonal = NULL;
     double result;
-    static char *kwlist[] = {"diagonal", "subdiagonal", NULL};
+    static char *kwlist[] = { "diagonal", "subdiagonal", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&O&", kwlist,
-        PyConverter_DoubleVector4, &diagonal,
-        PyConverter_DoubleVector3, &subdiagonal)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&O&",
+        kwlist,
+        PyConverter_DoubleVector4,
+        &diagonal,
+        PyConverter_DoubleVector3,
+        &subdiagonal
+        ))
+        goto _fail;
 
     result = max_eigenvalue_of_tridiag_44(
         (double *)PyArray_DATA(diagonal),
-        (double *)PyArray_DATA(subdiagonal));
+        (double *)PyArray_DATA(subdiagonal)
+    );
 
     Py_DECREF(diagonal);
     Py_DECREF(subdiagonal);
     return PyFloat_FromDouble(result);
 
-  _fail:
-    Py_XDECREF(diagonal);
-    Py_XDECREF(subdiagonal);
+_fail:
+    Py_XDECREF((PyObject *)(diagonal));
+    Py_XDECREF((PyObject *)(subdiagonal));
     return NULL;
 }
 
 /*
 Eigenvector of symmetric matrix.
 */
-char py_eigenvector_of_symmetric_44_doc[] =
+static char py_eigenvector_of_symmetric_44_doc[] =
     "Return eigenvector of eigenvalue of symmetric tridiagonal 4x4 matrix.";
 
 static PyObject *
@@ -3874,10 +4329,19 @@ py_eigenvector_of_symmetric_44(
     double *M;
     double *buffer = NULL;
     double eigenvalue;
-    static char *kwlist[] = {"matrix", "eigenvalue", NULL};
+    static char *kwlist[] = { "matrix", "eigenvalue", NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O&d", kwlist,
-        PyConverter_DoubleMatrix44Copy, &matrix, &eigenvalue)) goto _fail;
+    if (
+        !PyArg_ParseTupleAndKeywords(
+        args,
+        kwds,
+        "O&d",
+        kwlist,
+        PyConverter_DoubleMatrix44Copy,
+        &matrix,
+        &eigenvalue
+        ))
+        goto _fail;
 
     result = (PyArrayObject*)PyArray_SimpleNew(1, &dims, NPY_DOUBLE);
     if (result == NULL) {
@@ -3898,8 +4362,11 @@ py_eigenvector_of_symmetric_44(
     M[15] -= eigenvalue;
 
     Py_BEGIN_ALLOW_THREADS
-    error = eigenvector_of_symmetric_44(
-                M, (double *)PyArray_DATA(result), buffer);
+        error = eigenvector_of_symmetric_44(
+        M,
+        (double *)PyArray_DATA(result),
+        buffer
+        );
     Py_END_ALLOW_THREADS
 
     if (error != 0) {
@@ -3911,10 +4378,10 @@ py_eigenvector_of_symmetric_44(
     Py_DECREF(matrix);
     return PyArray_Return(result);
 
-  _fail:
+_fail:
     PyMem_Free(buffer);
-    Py_XDECREF(matrix);
-    Py_XDECREF(result);
+    Py_XDECREF((PyObject *)(matrix));
+    Py_XDECREF((PyObject *)(result));
     return NULL;
 }
 
@@ -3922,146 +4389,149 @@ py_eigenvector_of_symmetric_44(
 /* Python module */
 
 static PyMethodDef module_methods[] = {
-    {"is_same_transform",
-        (PyCFunction)py_is_same_transform,
-        METH_VARARGS|METH_KEYWORDS, py_is_same_transform_doc},
-    {"identity_matrix",
-        (PyCFunction)py_identity_matrix, METH_NOARGS,
-        py_identity_matrix_doc},
-    {"translation_matrix",
-        (PyCFunction)py_translation_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_translation_matrix_doc},
-    {"reflection_matrix",
-        (PyCFunction)py_reflection_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_reflection_matrix_doc},
-    {"rotation_matrix",
-        (PyCFunction)py_rotation_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_rotation_matrix_doc},
-    {"scale_matrix",
-        (PyCFunction)py_scale_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_scale_matrix_doc},
-    {"projection_matrix",
-        (PyCFunction)py_projection_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_projection_matrix_doc},
-    {"clip_matrix",
-        (PyCFunction)py_clip_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_clip_matrix_doc},
-    {"shear_matrix",
-        (PyCFunction)py_shear_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_shear_matrix_doc},
-    {"superimposition_matrix",
-        (PyCFunction)py_superimposition_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_superimposition_matrix_doc},
-    {"orthogonalization_matrix",
-        (PyCFunction)py_orthogonalization_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_orthogonalization_matrix_doc},
-    {"euler_matrix",
-        (PyCFunction)py_euler_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_euler_matrix_doc},
-    {"euler_from_matrix",
-        (PyCFunction)py_euler_from_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_euler_from_matrix_doc},
-    {"quaternion_from_euler",
-        (PyCFunction)py_quaternion_from_euler,
-        METH_VARARGS|METH_KEYWORDS, py_quaternion_from_euler_doc},
-    {"quaternion_about_axis",
-        (PyCFunction)py_quaternion_about_axis,
-        METH_VARARGS|METH_KEYWORDS, py_quaternion_about_axis_doc},
-    {"quaternion_multiply",
-        (PyCFunction)py_quaternion_multiply,
-        METH_VARARGS|METH_KEYWORDS, py_quaternion_multiply_doc},
-    {"quaternion_matrix",
-        (PyCFunction)py_quaternion_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_quaternion_matrix_doc},
-    {"quaternion_from_matrix",
-        (PyCFunction)py_quaternion_from_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_quaternion_from_matrix_doc},
-    {"quaternion_conjugate",
-        (PyCFunction)py_quaternion_conjugate,
-        METH_VARARGS|METH_KEYWORDS, py_quaternion_conjugate_doc},
-    {"quaternion_inverse",
-        (PyCFunction)py_quaternion_inverse,
-        METH_VARARGS|METH_KEYWORDS, py_quaternion_inverse_doc},
-    {"quaternion_slerp",
-        (PyCFunction)py_quaternion_slerp,
-        METH_VARARGS|METH_KEYWORDS, py_quaternion_slerp_doc},
-    {"random_quaternion",
-        (PyCFunction)py_random_quaternion,
-        METH_VARARGS|METH_KEYWORDS, py_random_quaternion_doc},
-    {"random_rotation_matrix",
-        (PyCFunction)py_random_rotation_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_random_rotation_matrix_doc},
-    {"arcball_map_to_sphere",
-        (PyCFunction)py_arcball_map_to_sphere,
-        METH_VARARGS|METH_KEYWORDS, py_arcball_map_to_sphere_doc},
-    {"arcball_constrain_to_axis",
-        (PyCFunction)py_arcball_constrain_to_axis,
-        METH_VARARGS|METH_KEYWORDS, py_arcball_constrain_to_axis_doc},
-    {"vector_norm",
-        (PyCFunction)py_vector_norm,
-        METH_VARARGS|METH_KEYWORDS, py_vector_norm_doc},
-    {"unit_vector",
-        (PyCFunction)py_unit_vector,
-        METH_VARARGS|METH_KEYWORDS, py_unit_vector_doc},
-    {"random_vector",
-        (PyCFunction)py_random_vector,
-        METH_VARARGS|METH_KEYWORDS, py_random_vector_doc},
-    {"inverse_matrix",
-        (PyCFunction)py_inverse_matrix,
-        METH_VARARGS|METH_KEYWORDS, py_inverse_matrix_doc},
-    {"_tridiagonalize_symmetric_44",
-        (PyCFunction)py_tridiagonalize_symmetric_44,
-        METH_VARARGS|METH_KEYWORDS, py_tridiagonalize_symmetric_44_doc},
-    {"_max_eigenvalue_of_tridiag_44",
-        (PyCFunction)py_max_eigenvalue_of_tridiag_44,
-        METH_VARARGS|METH_KEYWORDS, py_max_eigenvalue_of_tridiag_44_doc},
-    {"_eigenvector_of_symmetric_44",
-        (PyCFunction)py_eigenvector_of_symmetric_44,
-        METH_VARARGS|METH_KEYWORDS, py_eigenvector_of_symmetric_44_doc},
-    {NULL, NULL, 0, NULL} /* Sentinel */
+    { "is_same_transform",
+      (PyCFunction)py_is_same_transform,
+      METH_VARARGS | METH_KEYWORDS, py_is_same_transform_doc },
+    { "identity_matrix",
+      (PyCFunction)py_identity_matrix, METH_NOARGS,
+      py_identity_matrix_doc },
+    { "translation_matrix",
+      (PyCFunction)py_translation_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_translation_matrix_doc },
+    { "reflection_matrix",
+      (PyCFunction)py_reflection_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_reflection_matrix_doc },
+    { "rotation_matrix",
+      (PyCFunction)py_rotation_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_rotation_matrix_doc },
+    { "scale_matrix",
+      (PyCFunction)py_scale_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_scale_matrix_doc },
+    { "projection_matrix",
+      (PyCFunction)py_projection_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_projection_matrix_doc },
+    { "clip_matrix",
+      (PyCFunction)py_clip_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_clip_matrix_doc },
+    { "shear_matrix",
+      (PyCFunction)py_shear_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_shear_matrix_doc },
+    { "superimposition_matrix",
+      (PyCFunction)py_superimposition_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_superimposition_matrix_doc },
+    { "orthogonalization_matrix",
+      (PyCFunction)py_orthogonalization_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_orthogonalization_matrix_doc },
+    { "euler_matrix",
+      (PyCFunction)py_euler_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_euler_matrix_doc },
+    { "euler_from_matrix",
+      (PyCFunction)py_euler_from_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_euler_from_matrix_doc },
+    { "quaternion_from_euler",
+      (PyCFunction)py_quaternion_from_euler,
+      METH_VARARGS | METH_KEYWORDS, py_quaternion_from_euler_doc },
+    { "quaternion_about_axis",
+      (PyCFunction)py_quaternion_about_axis,
+      METH_VARARGS | METH_KEYWORDS, py_quaternion_about_axis_doc },
+    { "quaternion_multiply",
+      (PyCFunction)py_quaternion_multiply,
+      METH_VARARGS | METH_KEYWORDS, py_quaternion_multiply_doc },
+    { "quaternion_matrix",
+      (PyCFunction)py_quaternion_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_quaternion_matrix_doc },
+    { "quaternion_from_matrix",
+      (PyCFunction)py_quaternion_from_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_quaternion_from_matrix_doc },
+    { "quaternion_conjugate",
+      (PyCFunction)py_quaternion_conjugate,
+      METH_VARARGS | METH_KEYWORDS, py_quaternion_conjugate_doc },
+    { "quaternion_inverse",
+      (PyCFunction)py_quaternion_inverse,
+      METH_VARARGS | METH_KEYWORDS, py_quaternion_inverse_doc },
+    { "quaternion_slerp",
+      (PyCFunction)py_quaternion_slerp,
+      METH_VARARGS | METH_KEYWORDS, py_quaternion_slerp_doc },
+    { "random_quaternion",
+      (PyCFunction)py_random_quaternion,
+      METH_VARARGS | METH_KEYWORDS, py_random_quaternion_doc },
+    { "random_rotation_matrix",
+      (PyCFunction)py_random_rotation_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_random_rotation_matrix_doc },
+    { "arcball_map_to_sphere",
+      (PyCFunction)py_arcball_map_to_sphere,
+      METH_VARARGS | METH_KEYWORDS, py_arcball_map_to_sphere_doc },
+    { "arcball_constrain_to_axis",
+      (PyCFunction)py_arcball_constrain_to_axis,
+      METH_VARARGS | METH_KEYWORDS, py_arcball_constrain_to_axis_doc },
+    { "vector_norm",
+      (PyCFunction)py_vector_norm,
+      METH_VARARGS | METH_KEYWORDS, py_vector_norm_doc },
+    { "unit_vector",
+      (PyCFunction)py_unit_vector,
+      METH_VARARGS | METH_KEYWORDS, py_unit_vector_doc },
+    { "random_vector",
+      (PyCFunction)py_random_vector,
+      METH_VARARGS | METH_KEYWORDS, py_random_vector_doc },
+    { "inverse_matrix",
+      (PyCFunction)py_inverse_matrix,
+      METH_VARARGS | METH_KEYWORDS, py_inverse_matrix_doc },
+    { "_tridiagonalize_symmetric_44",
+      (PyCFunction)py_tridiagonalize_symmetric_44,
+      METH_VARARGS | METH_KEYWORDS, py_tridiagonalize_symmetric_44_doc },
+    { "_max_eigenvalue_of_tridiag_44",
+      (PyCFunction)py_max_eigenvalue_of_tridiag_44,
+      METH_VARARGS | METH_KEYWORDS, py_max_eigenvalue_of_tridiag_44_doc },
+    { "_eigenvector_of_symmetric_44",
+      (PyCFunction)py_eigenvector_of_symmetric_44,
+      METH_VARARGS | METH_KEYWORDS, py_eigenvector_of_symmetric_44_doc },
+    { NULL, NULL, 0, NULL } /* Sentinel */
 };
 
-struct module_state {
-    PyObject *error;
-};
-
-#define GETSTATE(m) ((struct module_state*)PyModule_GetState(m))
-
-static int module_traverse(PyObject *m, visitproc visit, void *arg) {
-    Py_VISIT(GETSTATE(m)->error);
+static int module_traverse(
+    PyObject *m,
+    visitproc visit,
+    void *arg)
+{
+    (void)m;
+    (void)visit;
+    (void)arg;
     return 0;
 }
 
-static int module_clear(PyObject *m) {
-    Py_CLEAR(GETSTATE(m)->error);
+static int module_clear(
+    PyObject *m)
+{
+    (void)m;
     return 0;
 }
 
-static int module_exec(PyObject *module) {
+static int module_exec(
+    PyObject *module)
+{
     if (_import_array() < 0) {
         return -1;
     }
-    PyObject *s = PyUnicode_FromString(_VERSION_);
-    if (!s) return -1;
-    PyObject *dict = PyModule_GetDict(module);
-    if (PyDict_SetItemString(dict, "__version__", s) < 0) {
-        Py_DECREF(s);
+    if (PyModule_AddStringConstant(module, "__version__", _VERSION_) < 0) {
         return -1;
     }
-    Py_DECREF(s);
     return 0;
 }
 
 static struct PyModuleDef_Slot module_slots[] = {
-    {Py_mod_exec, module_exec},
-    {0, NULL}
+    { Py_mod_exec, module_exec },
+    { Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED },
+#ifdef Py_MOD_GIL_NOT_USED
+    { Py_mod_gil, Py_MOD_GIL_NOT_USED },
+#endif
+    { 0, NULL }
 };
 
 static struct PyModuleDef moduledef = {
     PyModuleDef_HEAD_INIT,
     "_transformations",
     _DOC_,
-    sizeof(struct module_state),
+    0,
     module_methods,
     module_slots,
     module_traverse,
