@@ -1,6 +1,13 @@
 Revisions
 ---------
 
+2026.8.8
+
+- Fix code review issues.
+- Make C extension ABI3 and free-threading compatible.
+- Drop support for Python 3.11 and numpy 2.0 (SPEC0).
+- Support Python 3.15.
+
 2026.1.18
 
 - Use multi-phase initialization.
