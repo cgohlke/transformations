@@ -42,7 +42,7 @@ The transformations library is no longer actively developed.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2026.1.18
+:Version: 2026.8.8
 
 Quickstart
 ----------
@@ -63,11 +63,18 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.11, 3.14.2 64-bit
-- `NumPy <https://pypi.org/project/numpy/>`_ 2.4.1
+- `CPython <https://www.python.org>`_ 3.12.10, 3.13.15, 3.14.7, 3.15.0rc 64-bit
+- `Numpy <https://pypi.org/project/numpy>`_ 2.5.2
 
 Revisions
 ---------
+
+2026.8.8
+
+- Fix code review issues.
+- Make C extension ABI3 and free-threading compatible.
+- Drop support for Python 3.11 and numpy 2.0 (SPEC0).
+- Support Python 3.15.
 
 2026.1.18
 
@@ -246,7 +253,7 @@ True
 
 from __future__ import annotations
 
-__version__ = '2026.1.18'
+__version__ = '2026.8.8'
 
 __all__ = [
     '_AXES2TUPLE',
@@ -361,7 +368,7 @@ def reflection_matrix(point, normal):
     >>> v2 = v0.copy()
     >>> v2[:3] += v1
     >>> v3 = v0.copy()
-    >>> v2[:3] -= v1
+    >>> v3[:3] -= v1
     >>> numpy.allclose(v2, numpy.dot(R, v3))
     True
 
@@ -716,7 +723,9 @@ def projection_from_matrix(matrix, *, pseudo=False):
     return point, normal, None, perspective, pseudo
 
 
-def clip_matrix(left, right, bottom, top, near, far, *, perspective=False):
+def clip_matrix(  # noqa: PLR0917
+    left, right, bottom, top, near, far, *, perspective=False
+):
     """Return matrix to obtain normalized device coordinates from frustum.
 
     The frustum bounds are axis-aligned along x (left, right),
@@ -834,7 +843,7 @@ def shear_from_matrix(matrix):
         n = numpy.cross(V[i0], V[i1])
         w = vector_norm(n)
         if w > lenorm:
-            lenorm = w  # type: ignore[assignment]
+            lenorm = w
             normal = n
     normal /= lenorm
     # direction and angle
@@ -857,7 +866,7 @@ def decompose_matrix(matrix):
     """Return sequence of transformations from transformation matrix.
 
     matrix : array_like
-        Non-degenerative homogeneous transformation matrix
+        Non-degenerative homogeneous transformation matrix.
 
     Return tuple of:
         scale : vector of 3 scaling factors
@@ -928,8 +937,8 @@ def decompose_matrix(matrix):
         numpy.negative(scale, scale)
         numpy.negative(row, row)
 
-    angles[1] = math.asin(-row[0, 2])
-    if math.cos(angles[1]):
+    angles[1] = math.asin(max(-1.0, min(1.0, -row[0, 2])))
+    if abs(math.cos(angles[1])) > _EPS:
         angles[0] = math.atan2(row[1, 2], row[2, 2])
         angles[2] = math.atan2(row[0, 1], row[0, 0])
     else:
@@ -1218,9 +1227,9 @@ def euler_matrix(ai, aj, ak, axes='sxyz'):
 
     """
     try:
-        firstaxis, parity, repetition, frame = _AXES2TUPLE[axes]
+        firstaxis, parity, repetition, frame = _AXES2TUPLE[axes.lower()]
     except (AttributeError, KeyError):
-        _TUPLE2AXES[axes]  # noqa: validation
+        _TUPLE2AXES[axes]  # validation
         firstaxis, parity, repetition, frame = axes
 
     i = firstaxis
@@ -1285,7 +1294,7 @@ def euler_from_matrix(matrix, axes='sxyz'):
     try:
         firstaxis, parity, repetition, frame = _AXES2TUPLE[axes.lower()]
     except (AttributeError, KeyError):
-        _TUPLE2AXES[axes]  # noqa: validation
+        _TUPLE2AXES[axes]  # validation
         firstaxis, parity, repetition, frame = axes
 
     i = firstaxis
@@ -1346,7 +1355,7 @@ def quaternion_from_euler(ai, aj, ak, axes='sxyz'):
     try:
         firstaxis, parity, repetition, frame = _AXES2TUPLE[axes.lower()]
     except (AttributeError, KeyError):
-        _TUPLE2AXES[axes]  # noqa: validation
+        _TUPLE2AXES[axes]  # validation
         firstaxis, parity, repetition, frame = axes
 
     i = firstaxis + 1
@@ -1653,7 +1662,7 @@ def quaternion_slerp(quat0, quat1, fraction, spin=0, *, shortestpath=True):
         # invert rotation
         d = -d
         numpy.negative(q1, q1)
-    angle = math.acos(d) + spin * math.pi
+    angle = math.acos(min(1.0, d)) + spin * math.pi
     if abs(angle) < _EPS:
         return q0
     isin = 1.0 / math.sin(angle)
@@ -1666,7 +1675,7 @@ def quaternion_slerp(quat0, quat1, fraction, spin=0, *, shortestpath=True):
 def random_quaternion(rand=None):
     """Return uniform random unit quaternion.
 
-    rand: array like or None
+    rand : array like or None
         Three independent random variables that are uniformly distributed
         between 0 and 1.
 
@@ -1700,7 +1709,7 @@ def random_quaternion(rand=None):
 def random_rotation_matrix(rand=None):
     """Return uniform random rotation matrix.
 
-    rand: array like
+    rand : array like
         Three independent random variables that are uniformly distributed
         between 0 and 1 for each returned quaternion.
 
@@ -1971,7 +1980,13 @@ def unit_vector(data, axis=None, *, out=None):
     if out is None:
         data = numpy.array(data, dtype=numpy.float64, copy=True)
         if data.ndim == 1:
-            data /= math.sqrt(numpy.dot(data, data))
+            if data.size == 0:
+                return data
+            length = math.sqrt(numpy.dot(data, data))
+            if length < _EPS:
+                msg = 'zero-length vector'
+                raise ValueError(msg)
+            data /= length
             return data
     else:
         if out is not data:
@@ -1980,7 +1995,7 @@ def unit_vector(data, axis=None, *, out=None):
     length = numpy.atleast_1d(numpy.sum(data * data, axis))
     numpy.sqrt(length, length)
     if axis is not None:
-        length = numpy.expand_dims(length, axis)
+        length = numpy.expand_dims(length, axis)  # type: ignore[assignment]
     data /= length
     if out is None:
         return data
@@ -2023,7 +2038,7 @@ def vector_product(v0, v1, axis=0):
     return numpy.cross(v0, v1, axis=axis)
 
 
-def angle_between_vectors(v0, v1, *, directed=True, axis=0):
+def angle_between_vectors(v0, v1, axis=0, *, directed=True):
     """Return angle between vectors.
 
     If directed is False, the input vectors are interpreted as undirected axes,
@@ -2150,7 +2165,7 @@ def _import_module(
                     )
             globals()[attr] = getattr(module, attr)
         return True
-    return None
+    return False
 
 
 _import_module('_transformations', __package__)
